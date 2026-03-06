@@ -1,0 +1,63 @@
+/**
+ * global.css — Base styles, Tailwind directives, and MapLibre overrides.
+ */
+
+/* Tailwind CSS layers */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Base reset ── */
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    font-family: "Inter", system-ui, -apple-system, sans-serif;
+    background-color: #030712; /* gray-950 */
+    color: #f9fafb; /* gray-50 */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* ── MapLibre GL JS popup customisation ── */
+@layer components {
+  .maplibregl-popup-content {
+    @apply bg-transparent shadow-none p-0 rounded-xl overflow-hidden;
+  }
+
+  .maplibregl-popup-tip {
+    @apply hidden;
+  }
+
+  /* Custom "Mae Chaem" popup wrapper — styled in Map.tsx */
+  .maechaem-popup .maplibregl-popup-content {
+    @apply p-0;
+  }
+
+  /* Navigation controls */
+  .maplibregl-ctrl-group {
+    @apply bg-gray-900 border border-gray-700 rounded-lg overflow-hidden shadow-lg;
+  }
+
+  .maplibregl-ctrl-group button {
+    @apply text-gray-200 hover:bg-gray-800 transition-colors;
+  }
+
+  /* Scale control */
+  .maplibregl-ctrl-scale {
+    @apply bg-gray-900/80 text-gray-300 border-gray-600 text-xs px-1.5 py-0.5 rounded;
+  }
+}
