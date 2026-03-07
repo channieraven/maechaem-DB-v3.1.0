@@ -131,6 +131,8 @@ export function Map({ plotsData, onPlotClick, flyToTarget, className = "" }: Map
         type: "raster",
         url: cogUrl,
         tileSize: 256,
+        minzoom: 8,
+        maxzoom: 22,
         attribution: "© Mae Chaem Agroforestry Project",
       });
 
@@ -138,9 +140,11 @@ export function Map({ plotsData, onPlotClick, flyToTarget, className = "" }: Map
         id: COG_LAYER_ID,
         type: "raster",
         source: COG_SOURCE_ID,
+        minzoom: 8,
         paint: {
           "raster-opacity": 1,
           "raster-fade-duration": 0,
+          "raster-resampling": "linear"
         },
       });
 
