@@ -6,15 +6,20 @@
  *  - Solid green polygon fill (matching v3.0.0 AgroforestryMap)
  *  - Thai-language popup labels (เจ้าของแปลง, รหัสแปลง, ฯลฯ)
  *  - flyToTarget prop for sidebar-driven map navigation
- *  - COG drone imagery via Cloudflare R2 tile proxy (retained from v3.1.0)
+ *  - COG drone imagery via Cloudflare R2 tile proxy using maplibre-cog-protocol
  */
 import { useEffect, useRef, useCallback } from "react";
-import maplibregl, { setWorkerUrl } from "maplibre-gl";
+import maplibregl, { addProtocol, setWorkerUrl } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import MaplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-csp-worker?url";
+import { cogProtocol } from "@geomatico/maplibre-cog-protocol";
 import type { GeoJsonFeatureCollection, PlotProperties } from "../../shared/types";
 
 setWorkerUrl(MaplibreWorkerUrl);
+
+// Register COG protocol for Cloud-Optimized GeoTIFF support via range requests.
+// This enables MapLibre to fetch and render COG files from the R2 tile proxy.
+addProtocol("cog", cogProtocol);
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -103,11 +108,15 @@ export function Map({ plotsData, onPlotClick, flyToTarget, className = "" }: Map
 
     map.on("load", () => {
       // ------------------------------------------------------------------
-      // 1. COG raster source from Cloudflare R2 (via tile proxy)
+      // 1. COG raster source from Cloudflare R2 via tile proxy.
+      //    Uses @geomatico/maplibre-cog-protocol to decode the COG file
+      //    through byte-range requests to our R2 proxy endpoint.
       // ------------------------------------------------------------------
+      const cogUrl = `cog://${window.location.origin}${COG_TILE_PROXY_BASE}/${COG_R2_KEY}`;
+
       map.addSource(COG_SOURCE_ID, {
         type: "raster",
-        tiles: [`${COG_TILE_PROXY_BASE}/${COG_R2_KEY}`],
+        url: cogUrl,
         tileSize: 256,
         attribution: "© Mae Chaem Agroforestry Project",
       });
@@ -136,7 +145,7 @@ export function Map({ plotsData, onPlotClick, flyToTarget, className = "" }: Map
         source: PLOTS_SOURCE_ID,
         paint: {
           "fill-color": "#22c55e",
-          "fill-opacity": 0.2,
+          "fill-opacity": 0.25,
         },
       });
 
@@ -146,8 +155,8 @@ export function Map({ plotsData, onPlotClick, flyToTarget, className = "" }: Map
         source: PLOTS_SOURCE_ID,
         paint: {
           "line-color": "#166534",
-          "line-width": 1,
-          "line-opacity": 0.9,
+          "line-width": 1.5,
+          "line-opacity": 1,
         },
       });
 
@@ -250,7 +259,7 @@ export function Map({ plotsData, onPlotClick, flyToTarget, className = "" }: Map
   return (
     <div
       ref={containerRef}
-      className={`w-full h-full rounded-xl overflow-hidden ${className}`}
+      className={`w-full h-full rounded-xl overflow-hidden shadow-sm ${className}`}
       aria-label="Mae Chaem agroforestry map"
     />
   );
@@ -276,7 +285,7 @@ function toFeatureCollection(
   };
 }
 
-/** Thai-language popup HTML (migrated from v3.0.0 AgroforestryMap). */
+/** Thai-language popup HTML — minimal white theme. */
 function buildPopupHtml(props: PlotProperties): string {
   const rows: [string, string][] = [
     ["เจ้าของแปลง", props.farmerName ?? "—"],
@@ -293,14 +302,14 @@ function buildPopupHtml(props: PlotProperties): string {
     .map(
       ([label, value]) =>
         `<tr>` +
-        `<td class="pr-2 text-gray-400 text-xs whitespace-nowrap">${label}</td>` +
-        `<td class="text-white text-xs font-medium">${value}</td>` +
+        `<td class="pr-3 text-gray-400 text-xs whitespace-nowrap font-normal">${label}</td>` +
+        `<td class="text-gray-800 text-xs font-medium">${value}</td>` +
         `</tr>`
     )
     .join("");
 
   return `
-    <div class="bg-gray-900 rounded-lg p-3 shadow-xl min-w-[200px]">
+    <div class="bg-white rounded-xl p-3 shadow-lg border border-gray-100 min-w-[200px]" style="font-family:'Sarabun',sans-serif">
       <table class="w-full border-collapse">${rowsHtml}</table>
     </div>
   `;

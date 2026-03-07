@@ -75,10 +75,10 @@ export function App() {
 
   if (authState === "loading") {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-950 text-white">
+      <div className="flex items-center justify-center h-screen bg-white text-gray-900">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-forest-400 border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm text-gray-400">Initialising…</p>
+          <div className="w-12 h-12 border-4 border-forest-600 border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-gray-500">กำลังโหลด…</p>
         </div>
       </div>
     );
@@ -86,10 +86,10 @@ export function App() {
 
   if (authState === "signed-out") {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-950 text-white">
+      <div className="flex items-center justify-center h-screen bg-white text-gray-900">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-forest-400 border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm text-gray-400">Redirecting to sign-in…</p>
+          <div className="w-12 h-12 border-4 border-forest-600 border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-gray-500">กำลังเปิดหน้าเข้าสู่ระบบ…</p>
         </div>
       </div>
     );

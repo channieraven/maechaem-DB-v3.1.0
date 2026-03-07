@@ -17,15 +17,15 @@ export function Sidebar({ plots, activeIndex, onPlotClick }: SidebarProps) {
   const features = plots?.features ?? [];
 
   return (
-    <aside className="hidden md:flex w-64 flex-col gap-4 border-r border-gray-800 bg-gray-900 p-4 overflow-y-auto flex-shrink-0">
-      <h2 className="font-semibold text-gray-200 text-sm">
+    <aside className="hidden md:flex w-64 flex-col gap-3 border-r border-gray-100 bg-gray-50 p-4 overflow-y-auto flex-shrink-0">
+      <h2 className="font-semibold text-gray-700 text-sm">
         ข้อมูลแปลง ({features.length} แปลง)
       </h2>
 
       {features.length === 0 ? (
-        <p className="text-xs text-gray-500">ไม่พบข้อมูลแปลง</p>
+        <p className="text-xs text-gray-400">ไม่พบข้อมูลแปลง</p>
       ) : (
-        <ul className="space-y-2">
+        <ul className="space-y-1.5">
           {features.map((feature, index) => {
             const p = feature.properties;
             const isActive = activeIndex === index;
@@ -35,21 +35,21 @@ export function Sidebar({ plots, activeIndex, onPlotClick }: SidebarProps) {
                 <button
                   type="button"
                   onClick={() => onPlotClick(index)}
-                  className={`w-full text-left rounded-md p-3 text-sm transition-colors ${
+                  className={`w-full text-left rounded-lg p-3 text-sm transition-colors ${
                     isActive
-                      ? "bg-green-900/60 ring-1 ring-green-500"
-                      : "bg-gray-800 hover:bg-green-900/30"
+                      ? "bg-green-50 ring-1 ring-green-400"
+                      : "bg-white hover:bg-green-50 border border-gray-100"
                   }`}
                 >
                   <p
                     className={`font-medium truncate ${
-                      isActive ? "text-green-300" : "text-gray-100"
+                      isActive ? "text-green-700" : "text-gray-800"
                     }`}
                   >
                     {p.farmerName ?? p.plotCode ?? `แปลง ${index + 1}`}
                   </p>
                   {p.plotCode != null && (
-                    <p className="text-gray-400 text-xs">รหัส: {p.plotCode}</p>
+                    <p className="text-gray-400 text-xs mt-0.5">รหัส: {p.plotCode}</p>
                   )}
                   {p.areaRai != null && (
                     <p className="text-gray-400 text-xs">{p.areaRai} ไร่</p>
