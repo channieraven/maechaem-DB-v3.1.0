@@ -30,7 +30,7 @@ const MAE_CHAEM_CENTER: [number, number] = [98.39, 18.53];
 const DEFAULT_ZOOM = 11;
 
 /** COG key in R2 (relative to the bucket root) */
-const COG_R2_KEY = "maechaem-db-drone/mnj_bf-1km.tif";
+const COG_R2_KEY = "mnj_bf-1km.tif";
 const COG_TILE_PROXY_BASE = "/api/r2/tiles";
 
 // Layer / source IDs
