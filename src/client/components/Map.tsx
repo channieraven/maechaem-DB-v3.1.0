@@ -29,7 +29,11 @@ addProtocol("cog", cogProtocol);
 const MAE_CHAEM_CENTER: [number, number] = [98.39, 18.53];
 const DEFAULT_ZOOM = 11;
 
-const cogUrl = "cog://https://tiles.maechaem-db-rfd.work/mnj_bf-1km.tif";
+// Use the same origin as the SPA so the request goes through the Worker's
+// R2 tile proxy (/api/r2/tiles/*) regardless of environment (local dev vs.
+// production).  The previous hard-coded subdomain (tiles.maechaem-db-rfd.work)
+// never existed, which caused GeoTIFF.js to throw AggregateError: Request failed.
+const cogUrl = `cog://${window.location.origin}/api/r2/tiles/mnj_bf-1km.tif`;
 
 // Layer / source IDs
 const PLOTS_SOURCE_ID = "plots";
@@ -124,8 +128,8 @@ export function Map({ plotsData, onPlotClick, flyToTarget, className = "" }: Map
     map.on("load", () => {
       // ------------------------------------------------------------------
       // 1. COG raster source — drone imagery via maplibre-cog-protocol.
-      //    Byte-range requests decode the Cloud-Optimized GeoTIFF served
-      //    from tiles.maechaem-db-rfd.work without a tile proxy.
+      //    Byte-range requests decode the Cloud-Optimized GeoTIFF routed
+      //    through the Worker's R2 tile proxy (/api/r2/tiles/*).
       // ------------------------------------------------------------------
       map.addSource(COG_SOURCE_ID, {
         type: "raster",
