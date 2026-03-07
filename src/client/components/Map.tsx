@@ -23,7 +23,7 @@ const MAE_CHAEM_CENTER: [number, number] = [98.1675, 18.5722];
 const DEFAULT_ZOOM = 11;
 
 /** COG key in R2 (relative to the bucket root) */
-const COG_R2_KEY = "landcover/maechaem_landcover_2024.tif";
+const COG_R2_KEY = "maechaem-db-drone/mnj_bf-1km.tif";
 /** Public base URL for the tile proxy — adjust for your Pages domain */
 const COG_TILE_PROXY_BASE = "/api/r2/tiles";
 
