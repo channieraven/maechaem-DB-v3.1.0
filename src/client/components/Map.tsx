@@ -10,9 +10,14 @@
  *  - Fully typed; no any-casting in the public interface.
  */
 import { useEffect, useRef, useCallback } from "react";
-import maplibregl from "maplibre-gl";
+import maplibregl, { setWorkerUrl } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+// Vite needs an explicit URL for the MapLibre CSP worker, otherwise the
+// worker thread boots with an empty URL and crashes with "Ne is not defined".
+import MaplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-csp-worker?url";
 import type { GeoJsonFeatureCollection, PlotProperties } from "../../shared/types";
+
+setWorkerUrl(MaplibreWorkerUrl);
 
 // ---------------------------------------------------------------------------
 // Constants

@@ -40,8 +40,12 @@ export default defineConfig({
     },
   },
 
-  // Optimise deps for browser
+  // Optimise deps for browser.
+  // maplibre-gl is excluded from pre-bundling because we use the CSP worker
+  // approach (setWorkerUrl) which requires Vite to serve the worker file
+  // directly rather than inlining it via esbuild.
   optimizeDeps: {
-    include: ["react", "react-dom", "maplibre-gl"],
+    include: ["react", "react-dom"],
+    exclude: ["maplibre-gl"],
   },
 });
