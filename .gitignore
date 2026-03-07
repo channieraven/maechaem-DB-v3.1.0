@@ -24,3 +24,6 @@ Thumbs.db
 
 # ── TypeScript tsbuildinfo ────────────────────────────────────────────────────
 tsconfig.tsbuildinfo
+
+# ── Lock file (generated locally; Cloudflare Pages uses npm install) ─────────
+package-lock.json
