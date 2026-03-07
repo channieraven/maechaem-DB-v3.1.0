@@ -14,6 +14,10 @@
     "not_found_handling": "single-page-application"
   },
 
+  "routes": [
+    { "pattern": "tiles.maechaem-db-rfd.work/*", "zone_name": "maechaem-db-rfd.work" }
+  ],
+
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",

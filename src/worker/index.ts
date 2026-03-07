@@ -20,6 +20,7 @@
  * - First-class Cloudflare bindings support (Hyperdrive, R2, KV, etc.).
  */
 import { Hono } from "hono";
+import type { Context } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { prettyJSON } from "hono/pretty-json";
@@ -29,6 +30,26 @@ import { clerkAuthMiddleware } from "./middleware/clerk";
 import type { Env } from "../db/db";
 
 const app = new Hono<{ Bindings: Env }>();
+
+// ---------------------------------------------------------------------------
+// tiles.maechaem-db-rfd.work subdomain — COG/R2 direct-access endpoint
+// ---------------------------------------------------------------------------
+// maplibre-cog-protocol (GeoTIFF.js) issues HTTP byte-range requests directly
+// to https://tiles.maechaem-db-rfd.work/<key>.  This middleware intercepts
+// those requests and serves the object from R2 with correct range-response
+// headers so GeoTIFF.js can decode Cloud-Optimized GeoTIFFs.
+// The Cloudflare route "tiles.maechaem-db-rfd.work/*" in wrangler.json routes
+// those requests to this same worker.
+
+app.use("*", async (c, next) => {
+  const url = new URL(c.req.url);
+  if (url.hostname !== "tiles.maechaem-db-rfd.work") return next();
+
+  const key = url.pathname.replace(/^\//, "");
+  if (!key) return c.json({ ok: false, error: "Key required" }, 400);
+
+  return serveR2Tile(c, key);
+});
 
 // ---------------------------------------------------------------------------
 // Global middleware
@@ -92,8 +113,25 @@ app.get("/api/protected/me", (c) => {
 // transparently forwards the Range header to R2.
 // ---------------------------------------------------------------------------
 
-app.get("/api/r2/tiles/:key{.+}", async (c) => {
+app.get("/api/r2/tiles/:key{.+}", (c) => {
   const key = c.req.param("key");
+  return serveR2Tile(c, key);
+});
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetches the R2 object identified by `key` and returns a streaming response
+ * with correct range-response headers.  Used by both the /api/r2/tiles/ route
+ * and the tiles.maechaem-db-rfd.work subdomain middleware above so the logic
+ * lives in exactly one place.
+ */
+async function serveR2Tile(
+  c: Context<{ Bindings: Env }>,
+  key: string
+): Promise<Response> {
   const rangeHeader = c.req.header("Range");
 
   let object: R2ObjectBody | null;
@@ -148,8 +186,8 @@ app.get("/api/r2/tiles/:key{.+}", async (c) => {
       bodyLength = Math.min(r.suffix, total);
       start = total - bodyLength;
     } else {
-      start = r.offset;
-      bodyLength = "length" in r ? r.length : total - r.offset;
+      start = r.offset ?? 0;
+      bodyLength = "length" in r && r.length !== undefined ? r.length : total - (r.offset ?? 0);
     }
 
     const end = start + bodyLength - 1;
@@ -160,11 +198,7 @@ app.get("/api/r2/tiles/:key{.+}", async (c) => {
   }
 
   return new Response(object.body, { headers, status });
-});
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+}
 
 /**
  * Parses an HTTP Range header of the form "bytes=start-end" or "bytes=start-"
