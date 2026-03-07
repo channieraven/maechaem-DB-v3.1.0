@@ -1,5 +1,5 @@
 {
-  "name": "maechaem-gis-dashboard",
+  "name": "maechaem-db-rfd",
   "main": "src/worker/index.ts",
   "compatibility_date": "2025-03-01",
   "compatibility_flags": ["nodejs_compat"],
@@ -16,7 +16,7 @@
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
-      "id": "YOUR_HYPERDRIVE_ID"
+      "id": "50ebedaa730f4cb890a07b7132beb18c"
     }
   ],
 
