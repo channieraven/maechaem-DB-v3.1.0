@@ -1,0 +1,34 @@
+{
+  "name": "maechaem-gis-dashboard",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2025-03-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  },
+
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "YOUR_HYPERDRIVE_ID"
+    }
+  ],
+
+  "r2_buckets": [
+    {
+      "binding": "R2_BUCKET",
+      "bucket_name": "maechaem-cog-tiles"
+    }
+  ],
+
+  "vars": {
+    "ENVIRONMENT": "production"
+  },
+
+  "dev": {
+    "port": 8788,
+    "local_protocol": "http"
+  }
+}
