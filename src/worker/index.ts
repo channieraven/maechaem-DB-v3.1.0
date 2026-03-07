@@ -130,17 +130,33 @@ app.get("/api/r2/tiles/:key{.+}", async (c) => {
   let status = 200;
   if (parsedRange) {
     status = 206;
-    // GeoTIFF.js reads the Content-Range header to determine the total file
-    // size, which is essential for parsing the COG header at the end of the
-    // file.  Without this header geotiff.js cannot seek correctly and throws
-    // "AggregateError: Request failed".
-    const total = object.size;
-    const start = parsedRange.offset;
-    const end =
-      parsedRange.length !== undefined
-        ? parsedRange.offset + parsedRange.length - 1
-        : total - 1;
+    // GeoTIFF.js requires a correct Content-Range header (with accurate total
+    // size) and Content-Length to parse COG tiles.  R2 may clamp a requested
+    // range at the end of the file and return fewer bytes than asked for; in
+    // that case object.range reflects the bytes actually returned, and we must
+    // use it — not the original parsedRange — to avoid an off-by-one that
+    // causes geotiff.js to throw "AggregateError: Request failed".
+    const total = object.size; // always the full object size per R2 Workers API
+
+    // Resolve the actual start/end from R2's returned range (preferred) or
+    // fall back to the parsed request range when object.range is absent.
+    const r = (object.range ?? parsedRange) as R2Range;
+    let start: number;
+    let bodyLength: number;
+
+    if ("suffix" in r) {
+      bodyLength = Math.min(r.suffix, total);
+      start = total - bodyLength;
+    } else {
+      start = r.offset;
+      bodyLength = "length" in r ? r.length : total - r.offset;
+    }
+
+    const end = start + bodyLength - 1;
     headers.set("Content-Range", `bytes ${start}-${end}/${total}`);
+    // Content-Length tells the client exactly how many bytes to expect in the
+    // body, which geotiff.js uses to validate the range response.
+    headers.set("Content-Length", String(bodyLength));
   }
 
   return new Response(object.body, { headers, status });
