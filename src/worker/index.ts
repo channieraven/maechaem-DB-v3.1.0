@@ -184,6 +184,16 @@ function parseRangeHeader(
 }
 
 // ---------------------------------------------------------------------------
+// SPA fallback — serve static assets for all non-API routes.
+// In the Workers + Assets model the Worker intercepts every request, so we
+// must explicitly delegate to the ASSETS binding for the compiled React app.
+// ---------------------------------------------------------------------------
+
+app.all("*", (c) => {
+  return c.env.ASSETS.fetch(c.req.raw);
+});
+
+// ---------------------------------------------------------------------------
 // Export the Hono app as a Cloudflare Pages / Workers fetch handler.
 // Cloudflare Pages expects the default export to have a `fetch` method.
 // ---------------------------------------------------------------------------
