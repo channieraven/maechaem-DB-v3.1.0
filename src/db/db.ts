@@ -39,6 +39,11 @@ export interface Env {
    */
   CLERK_SECRET_KEY: string;
   /**
+   * Clerk webhook signing secret — from the Clerk Dashboard (Webhooks → Signing Secret).
+   * Used to verify incoming webhook payloads from Clerk.
+   */
+  CLERK_WEBHOOK_SECRET?: string;
+  /**
    * Direct Neon PostgreSQL connection URL.
    * Used for local development (`npm run dev`) and Drizzle migrations.
    * In production this is **not** needed — Hyperdrive provides the URL.

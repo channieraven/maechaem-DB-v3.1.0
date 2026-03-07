@@ -1,19 +1,16 @@
 /**
  * Map.tsx — MapLibre GL JS map component with COG/R2 raster support.
  *
- * Features:
- *  - Renders an interactive map centred on Mae Chaem, Thailand.
- *  - Loads a vector GeoJSON layer of agroforestry plots from the API.
- *  - Adds a Cloud-Optimized GeoTIFF (COG) raster source served from
- *    Cloudflare R2 via the /api/r2/tiles proxy endpoint.
- *  - Highlights a plot on hover and shows a popup with plot details.
- *  - Fully typed; no any-casting in the public interface.
+ * Migrated from v3.0.0:
+ *  - Google Satellite Hybrid basemap (satellite imagery + road labels)
+ *  - Solid green polygon fill (matching v3.0.0 AgroforestryMap)
+ *  - Thai-language popup labels (เจ้าของแปลง, รหัสแปลง, ฯลฯ)
+ *  - flyToTarget prop for sidebar-driven map navigation
+ *  - COG drone imagery via Cloudflare R2 tile proxy (retained from v3.1.0)
  */
 import { useEffect, useRef, useCallback } from "react";
 import maplibregl, { setWorkerUrl } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-// Vite needs an explicit URL for the MapLibre CSP worker, otherwise the
-// worker thread boots with an empty URL and crashes with "Ne is not defined".
 import MaplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-csp-worker?url";
 import type { GeoJsonFeatureCollection, PlotProperties } from "../../shared/types";
 
@@ -24,12 +21,11 @@ setWorkerUrl(MaplibreWorkerUrl);
 // ---------------------------------------------------------------------------
 
 /** Mae Chaem district centre (longitude, latitude) */
-const MAE_CHAEM_CENTER: [number, number] = [98.1675, 18.5722];
+const MAE_CHAEM_CENTER: [number, number] = [98.39, 18.53];
 const DEFAULT_ZOOM = 11;
 
 /** COG key in R2 (relative to the bucket root) */
 const COG_R2_KEY = "maechaem-db-drone/mnj_bf-1km.tif";
-/** Public base URL for the tile proxy — adjust for your Pages domain */
 const COG_TILE_PROXY_BASE = "/api/r2/tiles";
 
 // Layer / source IDs
@@ -40,15 +36,45 @@ const PLOTS_HIGHLIGHT_LAYER = "plots-highlight";
 const COG_SOURCE_ID = "cog-raster";
 const COG_LAYER_ID = "cog-raster-layer";
 
+// Google Satellite Hybrid map style (satellite imagery + road labels, no API key required)
+const SATELLITE_MAP_STYLE: maplibregl.StyleSpecification = {
+  version: 8,
+  sources: {
+    satellite: {
+      type: "raster",
+      tiles: ["https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}"],
+      tileSize: 256,
+      maxzoom: 22,
+    },
+  },
+  layers: [
+    {
+      id: "satellite-tiles",
+      type: "raster",
+      source: "satellite",
+      minzoom: 0,
+      maxzoom: 22,
+    },
+  ],
+};
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+export interface FlyToTarget {
+  longitude: number;
+  latitude: number;
+  zoom?: number;
+}
 
 interface MapProps {
   /** GeoJSON FeatureCollection returned by GET /api/plots */
   plotsData?: GeoJsonFeatureCollection<PlotProperties> | null;
   /** Called when the user clicks a plot */
   onPlotClick?: (plotId: number, properties: PlotProperties) => void;
+  /** When set, the map flies to this location (e.g. triggered by sidebar click) */
+  flyToTarget?: FlyToTarget | null;
   className?: string;
 }
 
@@ -56,7 +82,7 @@ interface MapProps {
 // Component
 // ---------------------------------------------------------------------------
 
-export function Map({ plotsData, onPlotClick, className = "" }: MapProps) {
+export function Map({ plotsData, onPlotClick, flyToTarget, className = "" }: MapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const popupRef = useRef<maplibregl.Popup | null>(null);
@@ -67,16 +93,12 @@ export function Map({ plotsData, onPlotClick, className = "" }: MapProps) {
 
     const map = new maplibregl.Map({
       container: containerRef.current,
-      // Free OpenFreeMap style — no API key required, good for development.
-      // Swap to a Mapbox / MapTiler style for production.
-      style: "https://tiles.openfreemap.org/styles/liberty",
+      style: SATELLITE_MAP_STYLE,
       center: MAE_CHAEM_CENTER,
       zoom: DEFAULT_ZOOM,
     });
 
-    // Navigation controls (zoom + compass)
     map.addControl(new maplibregl.NavigationControl(), "top-right");
-    // Scale bar
     map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
 
     map.on("load", () => {
@@ -85,8 +107,6 @@ export function Map({ plotsData, onPlotClick, className = "" }: MapProps) {
       // ------------------------------------------------------------------
       map.addSource(COG_SOURCE_ID, {
         type: "raster",
-        // TileJSON-style URL: the proxy endpoint handles HTTP range requests
-        // that MapLibre uses to read individual COG tiles efficiently.
         tiles: [`${COG_TILE_PROXY_BASE}/${COG_R2_KEY}`],
         tileSize: 256,
         attribution: "© Mae Chaem Agroforestry Project",
@@ -97,52 +117,41 @@ export function Map({ plotsData, onPlotClick, className = "" }: MapProps) {
         type: "raster",
         source: COG_SOURCE_ID,
         paint: {
-          "raster-opacity": 0.6,
-          "raster-fade-duration": 300,
+          "raster-opacity": 1,
+          "raster-fade-duration": 0,
         },
       });
 
       // ------------------------------------------------------------------
-      // 2. Plots vector source (GeoJSON)
+      // 2. Plots vector source (GeoJSON) — solid green fill (from v3.0.0)
       // ------------------------------------------------------------------
       map.addSource(PLOTS_SOURCE_ID, {
         type: "geojson",
-        // Start with an empty collection; data is set via the plotsData prop.
         data: { type: "FeatureCollection", features: [] },
       });
 
-      // Semi-transparent fill
       map.addLayer({
         id: PLOTS_FILL_LAYER,
         type: "fill",
         source: PLOTS_SOURCE_ID,
         paint: {
-          "fill-color": [
-            "match",
-            ["get", "systemType"],
-            "home_garden", "#22c55e",
-            "mixed_fruit", "#f59e0b",
-            "timber_bamboo", "#3b82f6",
-            "teak_monoculture", "#8b5cf6",
-            /* default */ "#6b7280",
-          ],
-          "fill-opacity": 0.5,
+          "fill-color": "#22c55e",
+          "fill-opacity": 0.2,
         },
       });
 
-      // Outline
       map.addLayer({
         id: PLOTS_OUTLINE_LAYER,
         type: "line",
         source: PLOTS_SOURCE_ID,
         paint: {
-          "line-color": "#fff",
+          "line-color": "#166534",
           "line-width": 1,
-          "line-opacity": 0.8,
+          "line-opacity": 0.9,
         },
       });
 
-      // Hover highlight layer (initially empty)
+      // Hover highlight layer
       map.addSource(`${PLOTS_SOURCE_ID}-highlight`, {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
@@ -154,12 +163,12 @@ export function Map({ plotsData, onPlotClick, className = "" }: MapProps) {
         source: `${PLOTS_SOURCE_ID}-highlight`,
         paint: {
           "fill-color": "#fff",
-          "fill-opacity": 0.25,
+          "fill-opacity": 0.2,
         },
       });
 
       // ------------------------------------------------------------------
-      // 3. Interactivity — hover popup
+      // 3. Interactivity — hover popup with Thai labels (from v3.0.0)
       // ------------------------------------------------------------------
       const popup = new maplibregl.Popup({
         closeButton: false,
@@ -176,9 +185,6 @@ export function Map({ plotsData, onPlotClick, className = "" }: MapProps) {
         if (!feature) return;
         const props = feature.properties as PlotProperties;
 
-        // Update highlight source — MapLibreFeature implements the GeoJSON spec
-        // so a direct cast is safe here; the intermediate 'unknown' is required
-        // because MapLibre's internal Feature type diverges from @types/geojson.
         (
           map.getSource(`${PLOTS_SOURCE_ID}-highlight`) as maplibregl.GeoJSONSource
         ).setData(toFeatureCollection(feature));
@@ -197,7 +203,6 @@ export function Map({ plotsData, onPlotClick, className = "" }: MapProps) {
         ).setData({ type: "FeatureCollection", features: [] });
       });
 
-      // Click — fire onPlotClick callback
       map.on("click", PLOTS_FILL_LAYER, (e) => {
         if (!e.features?.length || !onPlotClick) return;
         const props = e.features[0]?.properties as PlotProperties;
@@ -225,6 +230,23 @@ export function Map({ plotsData, onPlotClick, className = "" }: MapProps) {
     }
   }, [plotsData]);
 
+  // ----- Fly to target when sidebar plot is clicked (from v3.0.0) -----
+  const handleFlyTo = useCallback((target: FlyToTarget) => {
+    const map = mapRef.current;
+    if (!map) return;
+    map.flyTo({
+      center: [target.longitude, target.latitude],
+      zoom: target.zoom ?? 15,
+      duration: 1500,
+    });
+  }, []);
+
+  useEffect(() => {
+    if (flyToTarget) {
+      handleFlyTo(flyToTarget);
+    }
+  }, [flyToTarget, handleFlyTo]);
+
   return (
     <div
       ref={containerRef}
@@ -238,14 +260,6 @@ export function Map({ plotsData, onPlotClick, className = "" }: MapProps) {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Wraps a single MapLibre map feature into a GeoJSON FeatureCollection
- * that can be passed to `GeoJSONSource.setData()`.
- *
- * MapLibre's internal `MapGeoJSONFeature` type carries extra rendering fields
- * that differ from the plain `GeoJSON.Feature` type in @types/geojson.
- * This adapter strips those extra fields to produce a spec-compliant Feature.
- */
 function toFeatureCollection(
   feature: maplibregl.MapGeoJSONFeature
 ): GeoJSON.FeatureCollection {
@@ -262,27 +276,34 @@ function toFeatureCollection(
   };
 }
 
+/** Thai-language popup HTML (migrated from v3.0.0 AgroforestryMap). */
 function buildPopupHtml(props: PlotProperties): string {
-  const rows = [
-    ["Plot", props.plotCode],
-    ["Village", props.village ?? "—"],
-    ["Owner", props.ownerName ?? "—"],
-    ["System", props.systemType ?? "—"],
-    ["Area", props.areaRai != null ? `${props.areaRai.toFixed(2)} rai` : "—"],
-  ]
+  const rows: [string, string][] = [
+    ["เจ้าของแปลง", props.farmerName ?? "—"],
+    ["รหัสแปลง", props.plotCode ?? "—"],
+    ["ขนาดพื้นที่", props.areaRai != null ? `${props.areaRai} ไร่` : "—"],
+    ["ตำบล", props.tambon ?? "—"],
+  ];
+
+  if (props.elevMean != null) {
+    rows.push(["ความสูงเฉลี่ย", `${props.elevMean} ม.เหนือระดับน้ำทะเล`]);
+  }
+
+  const rowsHtml = rows
     .map(
       ([label, value]) =>
-        `<tr><td class="pr-2 text-gray-400 text-xs">${label}</td>` +
-        `<td class="text-white text-xs font-medium">${value}</td></tr>`
+        `<tr>` +
+        `<td class="pr-2 text-gray-400 text-xs whitespace-nowrap">${label}</td>` +
+        `<td class="text-white text-xs font-medium">${value}</td>` +
+        `</tr>`
     )
     .join("");
 
   return `
-    <div class="bg-gray-900 rounded-lg p-3 shadow-xl min-w-[180px]">
-      <table class="w-full border-collapse">${rows}</table>
+    <div class="bg-gray-900 rounded-lg p-3 shadow-xl min-w-[200px]">
+      <table class="w-full border-collapse">${rowsHtml}</table>
     </div>
   `;
 }
 
-// Named export + default for flexibility
 export default Map;
