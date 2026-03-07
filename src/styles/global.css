@@ -24,9 +24,9 @@
   }
 
   body {
-    font-family: "Inter", system-ui, -apple-system, sans-serif;
-    background-color: #030712; /* gray-950 */
-    color: #f9fafb; /* gray-50 */
+    font-family: "Sarabun", system-ui, -apple-system, sans-serif;
+    background-color: #ffffff;
+    color: #111827; /* gray-900 */
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -47,17 +47,17 @@
     @apply p-0;
   }
 
-  /* Navigation controls */
+  /* Navigation controls — light theme */
   .maplibregl-ctrl-group {
-    @apply bg-gray-900 border border-gray-700 rounded-lg overflow-hidden shadow-lg;
+    @apply bg-white border border-gray-200 rounded-lg overflow-hidden shadow-md;
   }
 
   .maplibregl-ctrl-group button {
-    @apply text-gray-200 hover:bg-gray-800 transition-colors;
+    @apply text-gray-600 hover:bg-gray-50 transition-colors;
   }
 
-  /* Scale control */
+  /* Scale control — light theme */
   .maplibregl-ctrl-scale {
-    @apply bg-gray-900/80 text-gray-300 border-gray-600 text-xs px-1.5 py-0.5 rounded;
+    @apply bg-white/90 text-gray-600 border-gray-300 text-xs px-1.5 py-0.5 rounded;
   }
 }

@@ -31,7 +31,7 @@ export default {
         },
       },
       fontFamily: {
-        sans: ["Inter", "system-ui", "sans-serif"],
+        sans: ["Sarabun", "system-ui", "sans-serif"],
       },
     },
   },
