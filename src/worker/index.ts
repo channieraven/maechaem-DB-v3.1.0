@@ -24,6 +24,7 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { prettyJSON } from "hono/pretty-json";
 import { plotsRouter } from "./routes/plots";
+import { webhooksRouter } from "./routes/webhooks";
 import { clerkAuthMiddleware } from "./middleware/clerk";
 import type { Env } from "../db/db";
 
@@ -68,6 +69,9 @@ app.get("/api/health", (c) =>
 // Public plot listing & detail (authentication optional — add clerkAuthMiddleware
 // before the router if you want to restrict access)
 app.route("/api/plots", plotsRouter);
+
+// Clerk webhook — public, signature-verified internally by the handler.
+app.route("/api/webhooks", webhooksRouter);
 
 // ---------------------------------------------------------------------------
 // Protected routes (require valid Clerk session)

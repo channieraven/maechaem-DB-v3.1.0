@@ -1,76 +1,70 @@
 /**
- * Sidebar.tsx — Plot detail sidebar component.
+ * Sidebar.tsx — All-plots list sidebar (migrated from v3.0.0 DashboardClient).
  *
- * Displays summary statistics and details for the selected plot.
- * Appears as a slide-in panel on the right side of the dashboard.
+ * Displays a scrollable list of all plots. Clicking a plot fires onPlotClick,
+ * which triggers a flyTo animation on the map. The active plot is highlighted.
+ * Labels are in Thai to match v3.0.0.
  */
-import type { PlotProperties } from "../../shared/types";
+import type { GeoJsonFeatureCollection, PlotProperties } from "../../shared/types";
 
 interface SidebarProps {
-  plot: PlotProperties | null;
-  onClose: () => void;
+  plots: GeoJsonFeatureCollection<PlotProperties> | null;
+  activeIndex: number | null;
+  onPlotClick: (index: number) => void;
 }
 
-export function Sidebar({ plot, onClose }: SidebarProps) {
-  if (!plot) return null;
+export function Sidebar({ plots, activeIndex, onPlotClick }: SidebarProps) {
+  const features = plots?.features ?? [];
 
   return (
-    <aside className="absolute top-4 right-4 z-10 w-72 bg-gray-900/95 backdrop-blur-sm text-white rounded-xl shadow-2xl overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 bg-forest-800 border-b border-forest-700">
-        <h2 className="font-semibold text-sm truncate">{plot.plotCode}</h2>
-        <button
-          onClick={onClose}
-          className="text-gray-300 hover:text-white transition-colors ml-2 flex-shrink-0"
-          aria-label="Close panel"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
+    <aside className="hidden md:flex w-64 flex-col gap-4 border-r border-gray-800 bg-gray-900 p-4 overflow-y-auto flex-shrink-0">
+      <h2 className="font-semibold text-gray-200 text-sm">
+        ข้อมูลแปลง ({features.length} แปลง)
+      </h2>
 
-      {/* Body */}
-      <dl className="divide-y divide-gray-800">
-        <DetailRow label="Village" value={plot.village} />
-        <DetailRow label="Owner" value={plot.ownerName} />
-        <DetailRow label="System Type" value={formatSystemType(plot.systemType)} />
-        <DetailRow label="Dominant Species" value={plot.dominantSpecies} />
-        <DetailRow
-          label="Area"
-          value={
-            plot.areaRai != null
-              ? `${plot.areaRai.toFixed(2)} rai (${(plot.areaRai * 0.16).toFixed(3)} ha)`
-              : null
-          }
-        />
-        <DetailRow
-          label="Established"
-          value={plot.establishedYear?.toString() ?? null}
-        />
-      </dl>
+      {features.length === 0 ? (
+        <p className="text-xs text-gray-500">ไม่พบข้อมูลแปลง</p>
+      ) : (
+        <ul className="space-y-2">
+          {features.map((feature, index) => {
+            const p = feature.properties;
+            const isActive = activeIndex === index;
+
+            return (
+              <li key={p.plotCode ?? index}>
+                <button
+                  type="button"
+                  onClick={() => onPlotClick(index)}
+                  className={`w-full text-left rounded-md p-3 text-sm transition-colors ${
+                    isActive
+                      ? "bg-green-900/60 ring-1 ring-green-500"
+                      : "bg-gray-800 hover:bg-green-900/30"
+                  }`}
+                >
+                  <p
+                    className={`font-medium truncate ${
+                      isActive ? "text-green-300" : "text-gray-100"
+                    }`}
+                  >
+                    {p.farmerName ?? p.plotCode ?? `แปลง ${index + 1}`}
+                  </p>
+                  {p.plotCode != null && (
+                    <p className="text-gray-400 text-xs">รหัส: {p.plotCode}</p>
+                  )}
+                  {p.areaRai != null && (
+                    <p className="text-gray-400 text-xs">{p.areaRai} ไร่</p>
+                  )}
+                  {p.elevMean != null && (
+                    <p className="text-gray-400 text-xs">{p.elevMean} ม.</p>
+                  )}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </aside>
   );
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function DetailRow({ label, value }: { label: string; value: string | null | undefined }) {
-  return (
-    <div className="px-4 py-2.5 flex justify-between gap-2">
-      <dt className="text-xs text-gray-400 flex-shrink-0">{label}</dt>
-      <dd className="text-xs text-right font-medium text-gray-100 truncate">
-        {value ?? <span className="text-gray-500 font-normal">—</span>}
-      </dd>
-    </div>
-  );
-}
-
-function formatSystemType(raw: string | null | undefined): string | null {
-  if (!raw) return null;
-  return raw.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 export default Sidebar;
