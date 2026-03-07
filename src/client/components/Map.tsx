@@ -8,7 +8,7 @@
  *  - flyToTarget prop for sidebar-driven map navigation
  *  - COG drone imagery via Cloudflare R2 tile proxy using maplibre-cog-protocol
  */
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import maplibregl, { addProtocol, setWorkerUrl } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import MaplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-csp-worker?url";
@@ -29,9 +29,7 @@ addProtocol("cog", cogProtocol);
 const MAE_CHAEM_CENTER: [number, number] = [98.39, 18.53];
 const DEFAULT_ZOOM = 11;
 
-/** COG key in R2 (relative to the bucket root) */
-const COG_R2_KEY = "mnj_bf-1km.tif";
-const COG_TILE_PROXY_BASE = "/api/r2/tiles";
+const cogUrl = "cog://https://tiles.maechaem-db-rfd.work/mnj_bf-1km.tif";
 
 // Layer / source IDs
 const PLOTS_SOURCE_ID = "plots";
@@ -91,6 +89,7 @@ export function Map({ plotsData, onPlotClick, flyToTarget, className = "" }: Map
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const popupRef = useRef<maplibregl.Popup | null>(null);
+  const [isMapLoaded, setIsMapLoaded] = useState(false);
 
   // ----- Initialise map once -----
   useEffect(() => {
@@ -233,6 +232,7 @@ export function Map({ plotsData, onPlotClick, flyToTarget, className = "" }: Map
         const props = e.features[0]?.properties as PlotProperties;
         if (props) onPlotClick(props.id, props);
       });
+      setIsMapLoaded(true);
     });
 
     mapRef.current = map;
@@ -247,13 +247,13 @@ export function Map({ plotsData, onPlotClick, flyToTarget, className = "" }: Map
   // ----- Update plots source when data changes -----
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !map.isStyleLoaded() || !plotsData) return;
+    if (!map || !isMapLoaded || !plotsData) return;
 
     const source = map.getSource(PLOTS_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
     if (source) {
       source.setData(plotsData as unknown as GeoJSON.FeatureCollection);
     }
-  }, [plotsData]);
+  }, [plotsData, isMapLoaded]);
 
   // ----- Fly to target when sidebar plot is clicked (from v3.0.0) -----
   const handleFlyTo = useCallback((target: FlyToTarget) => {
