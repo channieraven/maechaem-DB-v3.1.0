@@ -30,6 +30,11 @@ export interface Env {
   /** R2 bucket for Cloud-Optimized GeoTIFF (COG) raster tiles. */
   R2_BUCKET: R2Bucket;
   /**
+   * Static assets binding — serves the compiled Vite SPA from the `dist/`
+   * directory.  Exposed by setting `assets.binding = "ASSETS"` in wrangler.json.
+   */
+  ASSETS: Fetcher;
+  /**
    * Clerk publishable key — safe to expose in the browser, set as a Pages
    * environment variable.
    */
