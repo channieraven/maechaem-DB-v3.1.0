@@ -109,8 +109,12 @@ export function Map({ plotsData, onPlotClick, flyToTarget, className = "" }: Map
     // Gracefully handle COG source errors (e.g. file not yet uploaded to R2).
     // Without this handler, geotiff.js throws an uncaught AggregateError when
     // the tile proxy returns 404 and the rest of the map still renders fine.
+    // Guard on sourceId so other source errors don't accidentally remove the
+    // COG layer (e.g. transient Google satellite tile failures).
     map.on("error", (e) => {
-      const message = (e as { error?: Error }).error?.message ?? "";
+      const evt = e as { sourceId?: string; error?: Error };
+      if (evt.sourceId !== COG_SOURCE_ID) return;
+      const message = evt.error?.message ?? "";
       if (message.includes("Request failed") || message.includes("404")) {
         console.warn("[Map] COG raster layer unavailable — drone imagery will not be shown.", e);
         if (map.getLayer(COG_LAYER_ID)) map.removeLayer(COG_LAYER_ID);
