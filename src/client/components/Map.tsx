@@ -123,12 +123,10 @@ export function Map({ plotsData, onPlotClick, flyToTarget, className = "" }: Map
 
     map.on("load", () => {
       // ------------------------------------------------------------------
-      // 1. COG raster source from Cloudflare R2 via tile proxy.
-      //    Uses @geomatico/maplibre-cog-protocol to decode the COG file
-      //    through byte-range requests to our R2 proxy endpoint.
+      // 1. COG raster source — drone imagery via maplibre-cog-protocol.
+      //    Byte-range requests decode the Cloud-Optimized GeoTIFF served
+      //    from tiles.maechaem-db-rfd.work without a tile proxy.
       // ------------------------------------------------------------------
-      const cogUrl = `cog://${window.location.origin}${COG_TILE_PROXY_BASE}/${COG_R2_KEY}`;
-
       map.addSource(COG_SOURCE_ID, {
         type: "raster",
         url: cogUrl,
