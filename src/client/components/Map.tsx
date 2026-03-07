@@ -106,6 +106,18 @@ export function Map({ plotsData, onPlotClick, flyToTarget, className = "" }: Map
     map.addControl(new maplibregl.NavigationControl(), "top-right");
     map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
 
+    // Gracefully handle COG source errors (e.g. file not yet uploaded to R2).
+    // Without this handler, geotiff.js throws an uncaught AggregateError when
+    // the tile proxy returns 404 and the rest of the map still renders fine.
+    map.on("error", (e) => {
+      const message = (e as { error?: Error }).error?.message ?? "";
+      if (message.includes("Request failed") || message.includes("404")) {
+        console.warn("[Map] COG raster layer unavailable — drone imagery will not be shown.", e);
+        if (map.getLayer(COG_LAYER_ID)) map.removeLayer(COG_LAYER_ID);
+        if (map.getSource(COG_SOURCE_ID)) map.removeSource(COG_SOURCE_ID);
+      }
+    });
+
     map.on("load", () => {
       // ------------------------------------------------------------------
       // 1. COG raster source from Cloudflare R2 via tile proxy.

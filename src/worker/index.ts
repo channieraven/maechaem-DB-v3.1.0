@@ -97,13 +97,15 @@ app.get("/api/r2/tiles/:key{.+}", async (c) => {
   const rangeHeader = c.req.header("Range");
 
   let object: R2ObjectBody | null;
+  // Track the parsed range so we can build the Content-Range response header.
+  let parsedRange: R2Range | undefined;
 
   if (rangeHeader) {
     // Parse "bytes=start-end" from the Range header and pass explicit
     // byte offsets to R2 so it returns a proper 206 Partial Content response.
-    const parsed = parseRangeHeader(rangeHeader);
-    if (parsed) {
-      object = await c.env.R2_BUCKET.get(key, { range: parsed });
+    parsedRange = parseRangeHeader(rangeHeader);
+    if (parsedRange) {
+      object = await c.env.R2_BUCKET.get(key, { range: parsedRange });
     } else {
       // Malformed Range header — fall back to a full object fetch.
       object = await c.env.R2_BUCKET.get(key);
@@ -121,11 +123,27 @@ app.get("/api/r2/tiles/:key{.+}", async (c) => {
   headers.set("Cache-Control", "public, max-age=86400, s-maxage=604800");
   // CORS for MapLibre tile requests
   headers.set("Access-Control-Allow-Origin", "*");
+  // Tell clients that this endpoint accepts byte-range requests (required by
+  // GeoTIFF.js / maplibre-cog-protocol to know it can make range requests).
+  headers.set("Accept-Ranges", "bytes");
 
-  return new Response(object.body, {
-    headers,
-    status: rangeHeader ? 206 : 200,
-  });
+  let status = 200;
+  if (parsedRange) {
+    status = 206;
+    // GeoTIFF.js reads the Content-Range header to determine the total file
+    // size, which is essential for parsing the COG header at the end of the
+    // file.  Without this header geotiff.js cannot seek correctly and throws
+    // "AggregateError: Request failed".
+    const total = object.size;
+    const start = parsedRange.offset;
+    const end =
+      parsedRange.length !== undefined
+        ? parsedRange.offset + parsedRange.length - 1
+        : total - 1;
+    headers.set("Content-Range", `bytes ${start}-${end}/${total}`);
+  }
+
+  return new Response(object.body, { headers, status });
 });
 
 // ---------------------------------------------------------------------------
