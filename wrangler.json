@@ -18,7 +18,7 @@
     {
       "binding": "DB",
       "database_name": "maechaem-db",
-      "database_id": "<YOUR_D1_DATABASE_ID>",
+      "database_id": "63081751-afd4-4be3-b3fa-a8e4814771eb",
       "migrations_dir": "drizzle/migrations"
     }
   ],
