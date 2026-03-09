@@ -5,14 +5,15 @@
  *   GET /api/plots          → GeoJSON FeatureCollection of all plots
  *   GET /api/plots/:id      → Full detail for a single plot
  *
- * Queries the `plot_boundary_plan` table which stores geometry as a GeoJSON
- * text string (migrated from PostGIS to Cloudflare D1 / SQLite).
+ * Queries the `plot_boundary_plan` table which stores geometry as a native
+ * PostGIS geometry(Geometry,4326) column.  ST_AsGeoJSON() is used in the
+ * SELECT to return the geometry as a GeoJSON text string.
  *
  * Responses are automatically cached at Cloudflare's edge using the
  * Cache-Control header so repeated requests don't hit the database.
  */
 import { Hono } from "hono";
-import { eq, isNotNull } from "drizzle-orm";
+import { eq, isNotNull, sql } from "drizzle-orm";
 import { createDb } from "../../db/db";
 import { plotBoundaryPlan } from "../../db/schema";
 import type { Env } from "../../db/db";
@@ -29,14 +30,24 @@ export const plotsRouter = new Hono<{ Bindings: Env }>();
 // ---------------------------------------------------------------------------
 // GET /api/plots
 // Returns a GeoJSON FeatureCollection of all plots.
-// Geometry is stored as a JSON text string in the `geom` column.
+// ST_AsGeoJSON() converts the PostGIS geometry column to a GeoJSON string.
 // ---------------------------------------------------------------------------
 plotsRouter.get("/", async (c) => {
   const db = createDb(c.env);
 
   try {
     const rows = await db
-      .select()
+      .select({
+        id: plotBoundaryPlan.id,
+        plotCode: plotBoundaryPlan.plotCode,
+        farmerName: plotBoundaryPlan.farmerName,
+        groupNumber: plotBoundaryPlan.groupNumber,
+        areaRai: plotBoundaryPlan.areaRai,
+        areaSqm: plotBoundaryPlan.areaSqm,
+        tambon: plotBoundaryPlan.tambon,
+        elevMean: plotBoundaryPlan.elevMean,
+        geom: sql<string>`ST_AsGeoJSON(${plotBoundaryPlan.geom})`,
+      })
       .from(plotBoundaryPlan)
       .where(isNotNull(plotBoundaryPlan.geom))
       .orderBy(plotBoundaryPlan.plotCode);
@@ -88,6 +99,7 @@ plotsRouter.get("/", async (c) => {
 // ---------------------------------------------------------------------------
 // GET /api/plots/:id
 // Returns full detail (including geometry) for a single plot.
+// ST_AsGeoJSON() converts the PostGIS geometry column to a GeoJSON string.
 // ---------------------------------------------------------------------------
 plotsRouter.get("/:id", async (c) => {
   const rawId = c.req.param("id");
@@ -101,7 +113,17 @@ plotsRouter.get("/:id", async (c) => {
 
   try {
     const rows = await db
-      .select()
+      .select({
+        id: plotBoundaryPlan.id,
+        plotCode: plotBoundaryPlan.plotCode,
+        farmerName: plotBoundaryPlan.farmerName,
+        groupNumber: plotBoundaryPlan.groupNumber,
+        areaRai: plotBoundaryPlan.areaRai,
+        areaSqm: plotBoundaryPlan.areaSqm,
+        tambon: plotBoundaryPlan.tambon,
+        elevMean: plotBoundaryPlan.elevMean,
+        geom: sql<string>`ST_AsGeoJSON(${plotBoundaryPlan.geom})`,
+      })
       .from(plotBoundaryPlan)
       .where(eq(plotBoundaryPlan.id, id));
 

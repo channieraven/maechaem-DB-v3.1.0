@@ -1,9 +1,13 @@
 /**
  * Drizzle ORM schema for Mae Chaem agroforestry database.
  *
- * v3.1.0 — Cloudflare Workers + Cloudflare D1 (SQLite).
- * Migrated from Neon PostgreSQL / Hyperdrive to Cloudflare D1 for
- * fully native Cloudflare storage — no external database required.
+ * v3.2.0 — Cloudflare Workers + Neon PostgreSQL + PostGIS.
+ * Reverted to Neon/PostGIS to preserve native spatial capabilities
+ * (ST_AsGeoJSON, spatial analysis, etc.) required for the GIS dashboard.
+ *
+ * DATABASE_URL is used in all contexts (migrations, local dev, production).
+ * Set it in .env for Drizzle Kit, in .dev.vars for wrangler dev, and via
+ * `wrangler secret put DATABASE_URL` for the production Cloudflare Worker.
  *
  * Tables:
  *  - plot_boundary_plan : GeoJSON plot boundaries with farmer metadata (map layer)
@@ -19,19 +23,36 @@
  *  - notifications      : in-app notifications for mentions / replies
  */
 import {
-  sqliteTable,
+  pgTable,
+  serial,
   integer,
   text,
   real,
-} from "drizzle-orm/sqlite-core";
+  boolean,
+  timestamp,
+  customType,
+} from "drizzle-orm/pg-core";
+
+/**
+ * PostGIS geometry column type.
+ *
+ * The column is created as `geometry(Geometry,4326)` in PostgreSQL.
+ * When reading, use `sql<string>\`ST_AsGeoJSON(${table.column})\`` in your
+ * Drizzle select to get a GeoJSON string back from the database.
+ * When writing, use `sql\`ST_SetSRID(ST_GeomFromGeoJSON(${value}::json::text),4326)\``.
+ */
+const postgisGeometry = customType<{ data: string }>({
+  dataType() {
+    return "geometry(Geometry,4326)";
+  },
+});
 
 // ---------------------------------------------------------------------------
-// plot_boundary_plan  (GIS map layer — migrated from v3.0.0 PostGIS table)
-// Geometry is stored as a GeoJSON string (TEXT) instead of PostGIS geometry.
+// plot_boundary_plan  (GIS map layer — PostGIS native geometry)
 // ---------------------------------------------------------------------------
 
-export const plotBoundaryPlan = sqliteTable("plot_boundary_plan", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const plotBoundaryPlan = pgTable("plot_boundary_plan", {
+  id: serial("id").primaryKey(),
   farmerName: text("farmer_name"),
   /** Unique plot identifier (e.g. "P05") */
   plotCode: text("plot_code").notNull().unique(),
@@ -44,24 +65,24 @@ export const plotBoundaryPlan = sqliteTable("plot_boundary_plan", {
   tambon: text("tambon"),
   /** Mean elevation in metres above sea level */
   elevMean: real("elev_mean"),
-  /** GeoJSON geometry object stored as a JSON text string */
-  geom: text("geom"),
+  /** PostGIS geometry(Geometry,4326) — query via ST_AsGeoJSON() */
+  geom: postgisGeometry("geom"),
 });
 
 // ---------------------------------------------------------------------------
 // plots
 // ---------------------------------------------------------------------------
 
-export const plots = sqliteTable("plots", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const plots = pgTable("plots", {
+  id: serial("id").primaryKey(),
   /** Unique plot identifier (e.g. "MC-2024-001") */
   plotCode: text("plot_code").notNull().unique(),
   /** Village / sub-district where the plot is located */
   village: text("village"),
   /** Name of the plot owner/farmer */
   ownerName: text("owner_name"),
-  /** GeoJSON Polygon or MultiPolygon geometry stored as a JSON text string */
-  geometry: text("geometry").notNull(),
+  /** PostGIS geometry(Geometry,4326) — query via ST_AsGeoJSON() */
+  geometry: postgisGeometry("geometry").notNull(),
   /** Area in rai (Thai land unit; 1 rai ≈ 0.16 ha) */
   areaRai: real("area_rai"),
   /** Area in hectares (computed field stored for convenience) */
@@ -72,18 +93,16 @@ export const plots = sqliteTable("plots", {
   dominantSpecies: text("dominant_species"),
   /** Year the plot was established */
   establishedYear: integer("established_year"),
-  /** Timestamp (ms since epoch) when the record was created */
-  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
-  /** Timestamp (ms since epoch) when the record was last updated */
-  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
 });
 
 // ---------------------------------------------------------------------------
 // species_observations
 // ---------------------------------------------------------------------------
 
-export const speciesObservations = sqliteTable("species_observations", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const speciesObservations = pgTable("species_observations", {
+  id: serial("id").primaryKey(),
   plotId: integer("plot_id")
     .notNull()
     .references(() => plots.id, { onDelete: "cascade" }),
@@ -95,15 +114,15 @@ export const speciesObservations = sqliteTable("species_observations", {
   avgDbhCm: real("avg_dbh_cm"),
   /** Average height in metres */
   avgHeightM: real("avg_height_m"),
-  observedAt: integer("observed_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+  observedAt: timestamp("observed_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
 });
 
 // ---------------------------------------------------------------------------
 // carbon_estimates
 // ---------------------------------------------------------------------------
 
-export const carbonEstimates = sqliteTable("carbon_estimates", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const carbonEstimates = pgTable("carbon_estimates", {
+  id: serial("id").primaryKey(),
   plotId: integer("plot_id")
     .notNull()
     .references(() => plots.id, { onDelete: "cascade" }),
@@ -113,7 +132,7 @@ export const carbonEstimates = sqliteTable("carbon_estimates", {
   carbonTco2ePerHa: real("carbon_tco2e_per_ha"),
   /** Methodology / allometric equation used */
   methodology: text("methodology"),
-  estimatedAt: integer("estimated_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+  estimatedAt: timestamp("estimated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
 });
 
 // ---------------------------------------------------------------------------
@@ -123,8 +142,8 @@ export const carbonEstimates = sqliteTable("carbon_estimates", {
 // metadata so the JWT carries the latest values.
 // ---------------------------------------------------------------------------
 
-export const profiles = sqliteTable("profiles", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const profiles = pgTable("profiles", {
+  id: serial("id").primaryKey(),
   /** Clerk user ID — matches `sub` claim in the Clerk JWT. */
   userId: text("user_id").notNull().unique(),
   /** Primary email address sourced from Clerk on user.created. */
@@ -140,25 +159,24 @@ export const profiles = sqliteTable("profiles", {
   /**
    * Whether the user has been approved by an admin.
    * First registered user is automatically approved as bootstrap admin.
-   * Stored as INTEGER 0/1; Drizzle maps to boolean automatically.
    */
-  approved: integer("approved", { mode: "boolean" }).notNull().default(false),
+  approved: boolean("approved").notNull().default(false),
   /** Optional: job title / position */
   position: text("position"),
   /** Optional: employer / organisation */
   organization: text("organization"),
   /** Optional: contact phone number */
   phone: text("phone"),
-  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
-  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
 });
 
 // ---------------------------------------------------------------------------
 // trees_profile  (migrated from the `trees_profile` Google Sheet)
 // ---------------------------------------------------------------------------
 
-export const treesProfile = sqliteTable("trees_profile", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const treesProfile = pgTable("trees_profile", {
+  id: serial("id").primaryKey(),
   treeCode: text("tree_code").notNull().unique(),
   tagLabel: text("tag_label"),
   plotCode: text("plot_code").notNull(),
@@ -173,16 +191,16 @@ export const treesProfile = sqliteTable("trees_profile", {
   lat: real("lat"),
   lng: real("lng"),
   note: text("note"),
-  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
-  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
 });
 
 // ---------------------------------------------------------------------------
 // growth_logs  (migrated from the `growth_logs` Google Sheet)
 // ---------------------------------------------------------------------------
 
-export const growthLogs = sqliteTable("growth_logs", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const growthLogs = pgTable("growth_logs", {
+  id: serial("id").primaryKey(),
   logId: text("log_id").notNull().unique(),
   treeCode: text("tree_code").notNull(),
   tagLabel: text("tag_label"),
@@ -215,7 +233,7 @@ export const growthLogs = sqliteTable("growth_logs", {
   pricePerHand: real("price_per_hand"),
   /** target_sheet: "growth_logs" | "growth_logs_supp" */
   targetSheet: text("target_sheet").notNull().default("growth_logs"),
-  timestamp: integer("timestamp", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+  timestamp: timestamp("timestamp", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   /** Email/userId of the person who last edited this record. */
   lastEditedBy: text("last_edited_by"),
 });
@@ -224,8 +242,8 @@ export const growthLogs = sqliteTable("growth_logs", {
 // plot_images  (migrated from the `plot_images` Google Sheet)
 // ---------------------------------------------------------------------------
 
-export const plotImages = sqliteTable("plot_images", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const plotImages = pgTable("plot_images", {
+  id: serial("id").primaryKey(),
   imageId: text("image_id").notNull().unique(),
   plotCode: text("plot_code").notNull(),
   /** "plan_pre_1" | "plan_pre_2" | "plan_post_1" | "gallery" | "plan_pre" */
@@ -236,15 +254,15 @@ export const plotImages = sqliteTable("plot_images", {
   description: text("description"),
   uploader: text("uploader"),
   date: text("date"),
-  timestamp: integer("timestamp", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+  timestamp: timestamp("timestamp", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
 });
 
 // ---------------------------------------------------------------------------
 // spacing_logs  (migrated from the `spacing_logs` Google Sheet)
 // ---------------------------------------------------------------------------
 
-export const spacingLogs = sqliteTable("spacing_logs", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const spacingLogs = pgTable("spacing_logs", {
+  id: serial("id").primaryKey(),
   spacingId: text("spacing_id").notNull().unique(),
   plotCode: text("plot_code").notNull(),
   avgSpacing: real("avg_spacing"),
@@ -253,15 +271,15 @@ export const spacingLogs = sqliteTable("spacing_logs", {
   treeCount: integer("tree_count"),
   note: text("note"),
   date: text("date"),
-  timestamp: integer("timestamp", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+  timestamp: timestamp("timestamp", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
 });
 
 // ---------------------------------------------------------------------------
 // comments  (migrated from the `comments` Google Sheet)
 // ---------------------------------------------------------------------------
 
-export const comments = sqliteTable("comments", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const comments = pgTable("comments", {
+  id: serial("id").primaryKey(),
   commentId: text("comment_id").notNull().unique(),
   logId: text("log_id"),
   treeCode: text("tree_code"),
@@ -271,15 +289,15 @@ export const comments = sqliteTable("comments", {
   authorName: text("author_name"),
   /** JSON array of mentioned user emails, e.g. '["a@b.com"]' */
   mentions: text("mentions").notNull().default("[]"),
-  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
 });
 
 // ---------------------------------------------------------------------------
 // notifications  (migrated from the `notifications` Google Sheet)
 // ---------------------------------------------------------------------------
 
-export const notifications = sqliteTable("notifications", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const notifications = pgTable("notifications", {
+  id: serial("id").primaryKey(),
   notificationId: text("notification_id").notNull().unique(),
   userEmail: text("user_email").notNull(),
   commentId: text("comment_id"),
@@ -288,9 +306,8 @@ export const notifications = sqliteTable("notifications", {
   plotCode: text("plot_code"),
   message: text("message"),
   authorName: text("author_name"),
-  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
-  /** Stored as INTEGER 0/1; Drizzle maps to boolean automatically. */
-  isRead: integer("is_read", { mode: "boolean" }).notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  isRead: boolean("is_read").notNull().default(false),
 });
 
 // TypeScript types inferred from schema

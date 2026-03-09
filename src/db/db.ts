@@ -1,18 +1,20 @@
 /**
- * db.ts — Drizzle ORM database connection for Cloudflare D1.
+ * db.ts — Drizzle ORM database connection for Neon PostgreSQL (HTTP driver).
  *
- * Uses Cloudflare D1 (SQLite) as the database backend — fully native to
- * Cloudflare Workers, no external database required.
+ * Uses @neondatabase/serverless's HTTP-based `neon()` driver, which is ideal
+ * for Cloudflare Workers and other edge/serverless runtimes where persistent
+ * TCP/WebSocket connections are not available or practical.
  *
- * D1 is available as a binding named `DB` in wrangler.json.
- * In local development (`wrangler dev`), Wrangler automatically creates a
- * local SQLite file that mirrors the D1 API.
+ * The same DATABASE_URL is used in all contexts:
+ *  - Production (Cloudflare Worker)  : set via `wrangler secret put DATABASE_URL`
+ *  - Local dev (`wrangler dev`)      : set in .dev.vars
+ *  - Migrations (`npm run db:push`)  : set in .env (read by Drizzle Kit)
  *
- * Migrations are stored in `./drizzle/migrations/` and can be applied with:
- *   wrangler d1 execute maechaem-db --local --file=drizzle/migrations/0000_d1_schema.sql
- *   wrangler d1 execute maechaem-db --file=drizzle/migrations/0000_d1_schema.sql
+ * DATABASE_URL must be the direct Neon connection string, e.g.:
+ *   postgresql://<user>:<password>@<host>.neon.tech/<db>?sslmode=require
  */
-import { drizzle } from "drizzle-orm/d1";
+import { neon } from "@neondatabase/serverless";
+import { drizzle } from "drizzle-orm/neon-http";
 import * as schema from "./schema";
 
 export type {
@@ -42,10 +44,11 @@ export type {
  */
 export interface Env {
   /**
-   * Cloudflare D1 database binding — available in both production and local
-   * `wrangler dev`.  Declared as `d1_databases` in wrangler.json.
+   * Direct Neon connection string.
+   * Set as a Worker secret in production (`wrangler secret put DATABASE_URL`)
+   * and in .dev.vars for local development.
    */
-  DB: D1Database;
+  DATABASE_URL: string;
   /**
    * Static assets binding — serves the compiled Vite SPA from the `dist/`
    * directory.  Exposed by setting `assets.binding = "ASSETS"` in wrangler.json.
@@ -71,6 +74,9 @@ export interface Env {
 /**
  * Build a Drizzle database instance from the Cloudflare execution context.
  *
+ * Uses the HTTP-based Neon driver — no persistent connection required.
+ * Each request creates a lightweight HTTP call to Neon.
+ *
  * @param env  - The Cloudflare Env bindings object passed to the fetch handler.
  * @returns      Drizzle ORM instance with full schema typing.
  *
@@ -85,7 +91,8 @@ export interface Env {
  * ```
  */
 export function createDb(env: Env) {
-  return drizzle(env.DB, { schema });
+  const sql = neon(env.DATABASE_URL);
+  return drizzle(sql, { schema });
 }
 
 export type Database = ReturnType<typeof createDb>;
