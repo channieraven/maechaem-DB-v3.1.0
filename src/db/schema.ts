@@ -196,6 +196,8 @@ export const growthLogs = pgTable("growth_logs", {
   /** target_sheet: "growth_logs" | "growth_logs_supp" */
   targetSheet: varchar("target_sheet", { length: 50 }).notNull().default("growth_logs"),
   timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow().notNull(),
+  /** Email/userId of the person who last edited this record. */
+  lastEditedBy: varchar("last_edited_by", { length: 200 }),
 });
 
 // ---------------------------------------------------------------------------
