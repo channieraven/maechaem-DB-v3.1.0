@@ -30,15 +30,15 @@ function getGeometryCenter(geometry: GeoJsonGeometry): FlyToTarget | null {
   let coords: number[][] = [];
 
   if (geometry.type === "Polygon") {
-    coords = geometry.coordinates[0];
+    coords = geometry.coordinates[0] ?? [];
   } else if (geometry.type === "MultiPolygon") {
-    coords = (geometry.coordinates as number[][][][]).flatMap((poly) => poly[0]);
+    coords = (geometry.coordinates as number[][][][]).flatMap((poly) => poly[0] ?? []);
   } else {
     return null;
   }
 
-  const lngs = coords.map((c) => c[0]);
-  const lats = coords.map((c) => c[1]);
+  const lngs = coords.map((c) => c[0] ?? 0);
+  const lats = coords.map((c) => c[1] ?? 0);
   return {
     longitude: (Math.min(...lngs) + Math.max(...lngs)) / 2,
     latitude: (Math.min(...lats) + Math.max(...lats)) / 2,

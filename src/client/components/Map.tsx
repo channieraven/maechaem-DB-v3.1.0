@@ -124,8 +124,9 @@ export function Map({ plotsData, onPlotClick, flyToTarget, className = "" }: Map
     map.on("load", () => {
       // ------------------------------------------------------------------
       // 1. COG raster source — drone imagery via maplibre-cog-protocol.
-      //    Byte-range requests decode the Cloud-Optimized GeoTIFF served
-      //    from tiles.maechaem-db-rfd.work without a tile proxy.
+      //    Byte-range requests go to tiles.maechaem-db-rfd.work/<key>,
+      //    handled by the worker's tiles-subdomain middleware which serves
+      //    the Cloud-Optimized GeoTIFF directly from R2.
       // ------------------------------------------------------------------
       map.addSource(COG_SOURCE_ID, {
         type: "raster",
