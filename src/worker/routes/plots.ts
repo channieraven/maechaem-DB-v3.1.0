@@ -5,15 +5,16 @@
  *   GET /api/plots          → GeoJSON FeatureCollection of all plots
  *   GET /api/plots/:id      → Full detail for a single plot
  *
- * Queries the `plot_boundary_plan` table (migrated from v3.0.0) which uses
- * PostGIS geometry. ST_AsGeoJSON converts the PostGIS geom to GeoJSON.
+ * Queries the `plot_boundary_plan` table which stores geometry as a GeoJSON
+ * text string (migrated from PostGIS to Cloudflare D1 / SQLite).
  *
  * Responses are automatically cached at Cloudflare's edge using the
  * Cache-Control header so repeated requests don't hit the database.
  */
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
+import { eq, isNotNull } from "drizzle-orm";
 import { createDb } from "../../db/db";
+import { plotBoundaryPlan } from "../../db/schema";
 import type { Env } from "../../db/db";
 import type {
   GeoJsonFeatureCollection,
@@ -27,43 +28,46 @@ export const plotsRouter = new Hono<{ Bindings: Env }>();
 
 // ---------------------------------------------------------------------------
 // GET /api/plots
-// Returns a GeoJSON FeatureCollection of all plots with PostGIS geometry.
+// Returns a GeoJSON FeatureCollection of all plots.
+// Geometry is stored as a JSON text string in the `geom` column.
 // ---------------------------------------------------------------------------
 plotsRouter.get("/", async (c) => {
   const db = createDb(c.env);
 
   try {
-    const rows = await db.execute(sql`
-      SELECT
-        id,
-        farmer_name,
-        plot_code,
-        group_number,
-        area_rai,
-        area_sqm,
-        tambon,
-        elev_mean,
-        ST_AsGeoJSON(geom)::json AS geometry
-      FROM plot_boundary_plan
-      WHERE geom IS NOT NULL
-      ORDER BY plot_code
-    `);
+    const rows = await db
+      .select()
+      .from(plotBoundaryPlan)
+      .where(isNotNull(plotBoundaryPlan.geom))
+      .orderBy(plotBoundaryPlan.plotCode);
 
-    const features: GeoJsonFeature<PlotProperties>[] = rows.map((row) => ({
-      type: "Feature",
-      id: row.id as number,
-      geometry: row.geometry as GeoJsonGeometry,
-      properties: {
-        id: row.id as number,
-        plotCode: row.plot_code as string,
-        farmerName: (row.farmer_name as string | null) ?? null,
-        groupNumber: (row.group_number as string | null) ?? null,
-        areaRai: row.area_rai != null ? Number(row.area_rai) : null,
-        areaSqm: row.area_sqm != null ? Number(row.area_sqm) : null,
-        tambon: (row.tambon as string | null) ?? null,
-        elevMean: row.elev_mean != null ? Number(row.elev_mean) : null,
-      },
-    }));
+    const features: GeoJsonFeature<PlotProperties>[] = [];
+    for (const row of rows) {
+      let geometry: GeoJsonGeometry | null = null;
+      try {
+        geometry = JSON.parse(row.geom ?? "null") as GeoJsonGeometry | null;
+      } catch (parseErr) {
+        console.warn(`Skipping plot ID ${row.id}: invalid geometry —`, parseErr);
+        continue;
+      }
+      if (!geometry) continue;
+
+      features.push({
+        type: "Feature",
+        id: row.id,
+        geometry,
+        properties: {
+          id: row.id,
+          plotCode: row.plotCode,
+          farmerName: row.farmerName ?? null,
+          groupNumber: row.groupNumber ?? null,
+          areaRai: row.areaRai ?? null,
+          areaSqm: row.areaSqm ?? null,
+          tambon: row.tambon ?? null,
+          elevMean: row.elevMean ?? null,
+        },
+      });
+    }
 
     const collection: GeoJsonFeatureCollection<PlotProperties> = {
       type: "FeatureCollection",
@@ -96,37 +100,34 @@ plotsRouter.get("/:id", async (c) => {
   const db = createDb(c.env);
 
   try {
-    const rows = await db.execute(sql`
-      SELECT
-        id,
-        farmer_name,
-        plot_code,
-        group_number,
-        area_rai,
-        area_sqm,
-        tambon,
-        elev_mean,
-        ST_AsGeoJSON(geom)::json AS geometry
-      FROM plot_boundary_plan
-      WHERE id = ${id}
-        AND geom IS NOT NULL
-    `);
+    const rows = await db
+      .select()
+      .from(plotBoundaryPlan)
+      .where(eq(plotBoundaryPlan.id, id));
 
     const row = rows[0];
-    if (!row) {
+    if (!row || !row.geom) {
       return c.json({ ok: false, error: "Plot not found", status: 404 }, 404);
     }
 
+    let geometry: GeoJsonGeometry;
+    try {
+      geometry = JSON.parse(row.geom) as GeoJsonGeometry;
+    } catch (parseErr) {
+      console.error(`Failed to parse geometry for plot ID ${id}:`, parseErr);
+      return c.json({ ok: false, error: "Invalid plot geometry", status: 500 }, 500);
+    }
+
     const detail: PlotDetail = {
-      id: row.id as number,
-      plotCode: row.plot_code as string,
-      farmerName: (row.farmer_name as string | null) ?? null,
-      groupNumber: (row.group_number as string | null) ?? null,
-      areaRai: row.area_rai != null ? Number(row.area_rai) : null,
-      areaSqm: row.area_sqm != null ? Number(row.area_sqm) : null,
-      tambon: (row.tambon as string | null) ?? null,
-      elevMean: row.elev_mean != null ? Number(row.elev_mean) : null,
-      geometry: row.geometry as GeoJsonGeometry,
+      id: row.id,
+      plotCode: row.plotCode,
+      farmerName: row.farmerName ?? null,
+      groupNumber: row.groupNumber ?? null,
+      areaRai: row.areaRai ?? null,
+      areaSqm: row.areaSqm ?? null,
+      tambon: row.tambon ?? null,
+      elevMean: row.elevMean ?? null,
+      geometry,
     };
 
     c.header("Cache-Control", "public, max-age=60, s-maxage=300");

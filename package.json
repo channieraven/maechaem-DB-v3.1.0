@@ -15,7 +15,8 @@
     "deploy": "npm run build && wrangler deploy",
     "cf:dev": "wrangler dev",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
+    "db:d1:apply": "wrangler d1 migrations apply maechaem-db --local",
+    "db:d1:apply:prod": "wrangler d1 migrations apply maechaem-db",
     "db:studio": "drizzle-kit studio",
     "type-check": "tsc --noEmit"
   },
@@ -25,7 +26,6 @@
     "drizzle-orm": "^0.44.0",
     "hono": "^4.7.4",
     "maplibre-gl": "^5.3.0",
-    "postgres": "^3.4.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "svix": "^1.86.0"

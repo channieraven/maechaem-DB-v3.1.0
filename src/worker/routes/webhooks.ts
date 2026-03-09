@@ -14,27 +14,13 @@
  *     • First user ever → role="admin", approved=true
  *     • All subsequent  → role="pending", approved=false
  *     Clerk public metadata is updated so the JWT carries current role/approved.
- *
- * Prerequisites — run this SQL once against your database:
- *   CREATE TABLE IF NOT EXISTS profiles (
- *     id           SERIAL PRIMARY KEY,
- *     user_id      TEXT NOT NULL UNIQUE,
- *     email        TEXT NOT NULL,
- *     fullname     TEXT,
- *     role         VARCHAR(50) NOT NULL DEFAULT 'pending',
- *     approved     BOOLEAN     NOT NULL DEFAULT FALSE,
- *     position     TEXT,
- *     organization TEXT,
- *     phone        TEXT,
- *     created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
- *     updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
- *   );
  */
 import { Hono } from "hono";
 import { Webhook } from "svix";
-import { sql } from "drizzle-orm";
+import { count } from "drizzle-orm";
 import { createClerkClient } from "@clerk/backend";
 import { createDb } from "../../db/db";
+import { profiles } from "../../db/schema";
 import type { Env } from "../../db/db";
 
 export const webhooksRouter = new Hono<{ Bindings: Env }>();
@@ -129,19 +115,19 @@ webhooksRouter.post("/clerk", async (c) => {
 
       // Bootstrap-admin check: is this the very first profile?
       // Mirrors v2.1.0 `profilesSnapshot.empty` logic.
-      const countResult = await db.execute(
-        sql`SELECT COUNT(*)::int AS count FROM profiles`
-      );
-      const isFirstUser = (countResult[0]?.count as number) === 0;
+      const countResult = await db
+        .select({ value: count() })
+        .from(profiles);
+      const profileCount = countResult[0]?.value ?? 0;
+      const isFirstUser = profileCount === 0;
 
       const role = isFirstUser ? "admin" : "pending";
       const approved = isFirstUser;
 
-      await db.execute(sql`
-        INSERT INTO profiles (user_id, email, fullname, role, approved)
-        VALUES (${userId}, ${email}, ${fullname}, ${role}, ${approved})
-        ON CONFLICT (user_id) DO NOTHING
-      `);
+      await db
+        .insert(profiles)
+        .values({ userId, email, fullname, role, approved })
+        .onConflictDoNothing({ target: profiles.userId });
 
       console.log(
         `[webhooks] Profile created for user: ${userId}`,

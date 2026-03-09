@@ -16,7 +16,7 @@
  *   PUT  /api/users/:userId/role → update role + approved, sync to Clerk (admin only)
  */
 import { Hono, type Context } from "hono";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { createClerkClient } from "@clerk/backend";
 import { createDb } from "../../db/db";
 import { profiles } from "../../db/schema";
@@ -52,12 +52,10 @@ usersRouter.get("/", async (c) => {
   }
 
   const db = createDb(c.env);
-  const rows = await db.execute(sql`
-    SELECT id, user_id, email, fullname, role, approved,
-           position, organization, phone, created_at, updated_at
-    FROM profiles
-    ORDER BY created_at ASC
-  `);
+  const rows = await db
+    .select()
+    .from(profiles)
+    .orderBy(profiles.createdAt);
 
   return c.json({ ok: true, data: rows });
 });
@@ -149,20 +147,20 @@ usersRouter.put("/:id/role", async (c) => {
   const db = createDb(c.env);
 
   // Verify the target profile exists.
-  const profileRows = await db.execute(sql`
-    SELECT user_id FROM profiles WHERE user_id = ${targetUserId}
-  `);
+  const profileRows = await db
+    .select({ userId: profiles.userId })
+    .from(profiles)
+    .where(eq(profiles.userId, targetUserId));
 
   if (profileRows.length === 0) {
     return c.json({ ok: false, error: "Profile not found", status: 404 }, 404);
   }
 
   // Update the profile in the database.
-  await db.execute(sql`
-    UPDATE profiles
-    SET role = ${role}, approved = ${approved}, updated_at = NOW()
-    WHERE user_id = ${targetUserId}
-  `);
+  await db
+    .update(profiles)
+    .set({ role, approved, updatedAt: new Date() })
+    .where(eq(profiles.userId, targetUserId));
 
   // Sync updated role/approved to Clerk public metadata so the JWT reflects
   // the change on next token refresh — mirrors v2.1.0 setCustomUserClaims().
