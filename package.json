@@ -21,7 +21,7 @@
   },
   "dependencies": {
     "@clerk/backend": "^1.26.0",
-    "@clerk/react": "^5.67.0",
+    "@clerk/react": "^6.0.1",
     "drizzle-orm": "^0.44.0",
     "hono": "^4.7.4",
     "maplibre-gl": "^5.3.0",
