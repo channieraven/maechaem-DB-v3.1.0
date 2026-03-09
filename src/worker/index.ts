@@ -52,11 +52,18 @@ const app = new Hono<{ Bindings: Env }>();
 // Structured request logging (visible in `wrangler pages dev` console)
 app.use("*", logger());
 
-// CORS — in production tighten the origin to your Pages domain.
+// CORS — allow both the Cloudflare Pages default domain and the production
+// custom domain.  Same-origin requests (most production traffic) bypass CORS
+// checks entirely, so listing the custom domain here also covers scenarios
+// where the frontend is served from a subdomain or a separate origin.
 app.use(
   "/api/*",
   cors({
-    origin: ["http://localhost:5173", "https://maechaem-gis.pages.dev"],
+    origin: [
+      "http://localhost:5173",
+      "https://maechaem-gis.pages.dev",
+      "https://maechaem-db-rfd.work",
+    ],
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization"],
     credentials: true,

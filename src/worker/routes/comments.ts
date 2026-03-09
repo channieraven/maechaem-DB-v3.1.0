@@ -111,8 +111,9 @@ commentsRouter.post("/", async (c) => {
       (content.length > 60 ? "..." : "");
 
     if (notifyEmails.size > 0) {
-      const notifRows = [...notifyEmails].map((email) => ({
-        notificationId: `NTF_${Date.now()}_${email}`,
+      const ts = Date.now();
+      const notifRows = [...notifyEmails].map((email, idx) => ({
+        notificationId: `NTF_${ts}_${idx}_${email}`,
         userEmail: email,
         commentId,
         logId: logId || null,
