@@ -18,7 +18,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema";
 
-export type { Plot, NewPlot, SpeciesObservation, CarbonEstimate } from "./schema";
+export type { Plot, NewPlot, SpeciesObservation, CarbonEstimate, Profile, NewProfile } from "./schema";
 
 /**
  * Cloudflare environment bindings.

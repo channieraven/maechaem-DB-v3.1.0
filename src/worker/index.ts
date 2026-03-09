@@ -6,9 +6,11 @@
  * │  Cloudflare Pages                                                    │
  * │  ┌──────────────┐    ┌─────────────────────────────────────────────┐ │
  * │  │  dist/       │    │  _worker.js  (this file, bundled by Wrangler)│ │
- * │  │  (Vite SPA)  │    │  ├─ GET /api/plots      → Drizzle + Hyperdrive│ │
- * │  │              │    │  ├─ GET /api/plots/:id   → single plot detail │ │
- * │  │              │    │  └─ *  (fallthrough)    → serve SPA           │ │
+ * │  │  (Vite SPA)  │    │  ├─ GET /api/plots          → Drizzle + Hyperdrive│ │
+ * │  │              │    │  ├─ GET /api/plots/:id      → single plot detail │ │
+ * │  │              │    │  ├─ GET /api/users           → list profiles (admin)│ │
+ * │  │              │    │  ├─ PUT /api/users/:id/role  → sync role + claims  │ │
+ * │  │              │    │  └─ *  (fallthrough)         → serve SPA           │ │
  * │  └──────────────┘    └─────────────────────────────────────────────┘ │
  * └──────────────────────────────────────────────────────────────────────┘
  *
@@ -24,6 +26,7 @@ import { logger } from "hono/logger";
 import { prettyJSON } from "hono/pretty-json";
 import { plotsRouter } from "./routes/plots";
 import { webhooksRouter } from "./routes/webhooks";
+import { usersRouter } from "./routes/users";
 import { clerkAuthMiddleware } from "./middleware/clerk";
 import type { Env } from "../db/db";
 
@@ -76,13 +79,17 @@ app.route("/api/webhooks", webhooksRouter);
 // Protected routes (require valid Clerk session)
 // ---------------------------------------------------------------------------
 
-// Example of a protected route — extend as needed.
 app.use("/api/protected/*", clerkAuthMiddleware());
 
 app.get("/api/protected/me", (c) => {
   const userId = c.get("userId");
   return c.json({ ok: true, data: { userId } });
 });
+
+// User management — migrated from v2.1.0 syncUserClaims Cloud Function.
+// Requires a valid Clerk session; admin-only enforcement is done inside the router.
+app.use("/api/users/*", clerkAuthMiddleware());
+app.route("/api/users", usersRouter);
 
 // ---------------------------------------------------------------------------
 // SPA fallback — serve static assets for all non-API routes.
