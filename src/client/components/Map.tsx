@@ -1,25 +1,19 @@
 /**
- * Map.tsx — MapLibre GL JS map component with COG/R2 raster support.
+ * Map.tsx — MapLibre GL JS map component.
  *
  * Migrated from v3.0.0:
  *  - Google Satellite Hybrid basemap (satellite imagery + road labels)
  *  - Solid green polygon fill (matching v3.0.0 AgroforestryMap)
  *  - Thai-language popup labels (เจ้าของแปลง, รหัสแปลง, ฯลฯ)
  *  - flyToTarget prop for sidebar-driven map navigation
- *  - COG drone imagery via Cloudflare R2 tile proxy using maplibre-cog-protocol
  */
 import { useEffect, useRef, useCallback, useState } from "react";
-import maplibregl, { addProtocol, setWorkerUrl } from "maplibre-gl";
+import maplibregl, { setWorkerUrl } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import MaplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-csp-worker?url";
-import { cogProtocol } from "@geomatico/maplibre-cog-protocol";
 import type { GeoJsonFeatureCollection, PlotProperties } from "../../shared/types";
 
 setWorkerUrl(MaplibreWorkerUrl);
-
-// Register COG protocol for Cloud-Optimized GeoTIFF support via range requests.
-// This enables MapLibre to fetch and render COG files from the R2 tile proxy.
-addProtocol("cog", cogProtocol);
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -29,15 +23,11 @@ addProtocol("cog", cogProtocol);
 const MAE_CHAEM_CENTER: [number, number] = [98.39, 18.53];
 const DEFAULT_ZOOM = 11;
 
-const cogUrl = "cog://https://tiles.maechaem-db-rfd.work/mnj_bf-1km.tif";
-
 // Layer / source IDs
 const PLOTS_SOURCE_ID = "plots";
 const PLOTS_FILL_LAYER = "plots-fill";
 const PLOTS_OUTLINE_LAYER = "plots-outline";
 const PLOTS_HIGHLIGHT_LAYER = "plots-highlight";
-const COG_SOURCE_ID = "cog-raster";
-const COG_LAYER_ID = "cog-raster-layer";
 
 // Google Satellite Hybrid map style (satellite imagery + road labels, no API key required)
 const SATELLITE_MAP_STYLE: maplibregl.StyleSpecification = {
@@ -105,52 +95,9 @@ export function Map({ plotsData, onPlotClick, flyToTarget, className = "" }: Map
     map.addControl(new maplibregl.NavigationControl(), "top-right");
     map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
 
-    // Gracefully handle COG source errors (e.g. file not yet uploaded to R2).
-    // Without this handler, geotiff.js throws an uncaught AggregateError when
-    // the tile proxy returns 404 and the rest of the map still renders fine.
-    // Guard on sourceId so other source errors don't accidentally remove the
-    // COG layer (e.g. transient Google satellite tile failures).
-    map.on("error", (e) => {
-      const evt = e as { sourceId?: string; error?: Error };
-      if (evt.sourceId !== COG_SOURCE_ID) return;
-      const message = evt.error?.message ?? "";
-      if (message.includes("Request failed") || message.includes("404")) {
-        console.warn("[Map] COG raster layer unavailable — drone imagery will not be shown.", e);
-        if (map.getLayer(COG_LAYER_ID)) map.removeLayer(COG_LAYER_ID);
-        if (map.getSource(COG_SOURCE_ID)) map.removeSource(COG_SOURCE_ID);
-      }
-    });
-
     map.on("load", () => {
       // ------------------------------------------------------------------
-      // 1. COG raster source — drone imagery via maplibre-cog-protocol.
-      //    Byte-range requests go to tiles.maechaem-db-rfd.work/<key>,
-      //    handled by the worker's tiles-subdomain middleware which serves
-      //    the Cloud-Optimized GeoTIFF directly from R2.
-      // ------------------------------------------------------------------
-      map.addSource(COG_SOURCE_ID, {
-        type: "raster",
-        url: cogUrl,
-        tileSize: 256,
-        minzoom: 8,
-        maxzoom: 22,
-        attribution: "© Mae Chaem Agroforestry Project",
-      });
-
-      map.addLayer({
-        id: COG_LAYER_ID,
-        type: "raster",
-        source: COG_SOURCE_ID,
-        minzoom: 8,
-        paint: {
-          "raster-opacity": 1,
-          "raster-fade-duration": 0,
-          "raster-resampling": "linear"
-        },
-      });
-
-      // ------------------------------------------------------------------
-      // 2. Plots vector source (GeoJSON) — solid green fill (from v3.0.0)
+      // 1. Plots vector source (GeoJSON) — solid green fill (from v3.0.0)
       // ------------------------------------------------------------------
       map.addSource(PLOTS_SOURCE_ID, {
         type: "geojson",
@@ -195,7 +142,7 @@ export function Map({ plotsData, onPlotClick, flyToTarget, className = "" }: Map
       });
 
       // ------------------------------------------------------------------
-      // 3. Interactivity — hover popup with Thai labels (from v3.0.0)
+      // 2. Interactivity — hover popup with Thai labels (from v3.0.0)
       // ------------------------------------------------------------------
       const popup = new maplibregl.Popup({
         closeButton: false,

@@ -27,8 +27,6 @@ export type { Plot, NewPlot, SpeciesObservation, CarbonEstimate } from "./schema
 export interface Env {
   /** Cloudflare Hyperdrive binding — available in production Workers/Pages. */
   HYPERDRIVE: Hyperdrive;
-  /** R2 bucket for Cloud-Optimized GeoTIFF (COG) raster tiles. */
-  R2_BUCKET: R2Bucket;
   /**
    * Static assets binding — serves the compiled Vite SPA from the `dist/`
    * directory.  Exposed by setting `assets.binding = "ASSETS"` in wrangler.json.

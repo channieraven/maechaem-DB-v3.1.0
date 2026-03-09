@@ -12,6 +12,7 @@
  *  - Loading overlay and error banner
  */
 import { useState, useEffect, useCallback } from "react";
+import { UserButton } from "@clerk/react";
 import { Map } from "../components/Map";
 import { Sidebar } from "../components/Sidebar";
 import type {
@@ -144,6 +145,7 @@ export function Dashboard() {
           ) : (
             <span className="text-gray-500">{plotsData?.features.length ?? 0} แปลง</span>
           )}
+          <UserButton />
         </div>
       </header>
 
