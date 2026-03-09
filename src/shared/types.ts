@@ -64,6 +64,158 @@ export interface PlotDetail extends PlotProperties {
 }
 
 // ---------------------------------------------------------------------------
+// User / Profile  (migrated from v1.0.1 users sheet)
+// ---------------------------------------------------------------------------
+
+export interface UserProfile {
+  id: number;
+  userId: string;
+  email: string;
+  fullname: string | null;
+  position: string | null;
+  organization: string | null;
+  role: string;
+  approved: boolean;
+  createdAt: string;
+}
+
+/** Subset returned by the public "approved users" list endpoint */
+export interface AppUser {
+  email: string;
+  fullname: string | null;
+  role: string;
+}
+
+// ---------------------------------------------------------------------------
+// Tree profile  (migrated from v1.0.1 trees_profile sheet)
+// ---------------------------------------------------------------------------
+
+export interface TreeProfile {
+  id: number;
+  treeCode: string;
+  tagLabel: string | null;
+  plotCode: string;
+  speciesCode: string | null;
+  speciesGroup: string | null;
+  speciesName: string | null;
+  treeNumber: number | null;
+  rowMain: string | null;
+  rowSub: string | null;
+  utmX: number | null;
+  utmY: number | null;
+  lat: number | null;
+  lng: number | null;
+  note: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// Growth log  (migrated from v1.0.1 growth_logs sheet)
+// ---------------------------------------------------------------------------
+
+export interface GrowthLog {
+  id: number;
+  logId: string;
+  treeCode: string;
+  tagLabel: string | null;
+  plotCode: string;
+  speciesCode: string | null;
+  speciesGroup: string | null;
+  speciesName: string | null;
+  treeNumber: number | null;
+  rowMain: string | null;
+  rowSub: string | null;
+  heightM: number | null;
+  status: string | null;
+  flowering: string | null;
+  note: string | null;
+  recorder: string | null;
+  surveyDate: string | null;
+  dbhCm: number | null;
+  bambooCulms: number | null;
+  dbh1Cm: number | null;
+  dbh2Cm: number | null;
+  dbh3Cm: number | null;
+  bananaTotal: number | null;
+  banana1yr: number | null;
+  yieldBunches: number | null;
+  yieldHands: number | null;
+  pricePerHand: number | null;
+  targetSheet: string;
+  timestamp: string;
+}
+
+// ---------------------------------------------------------------------------
+// Plot image  (migrated from v1.0.1 plot_images sheet)
+// ---------------------------------------------------------------------------
+
+export interface PlotImage {
+  id: number;
+  imageId: string;
+  plotCode: string;
+  imageType: string | null;
+  galleryCategory: string | null;
+  url: string;
+  description: string | null;
+  uploader: string | null;
+  date: string | null;
+  timestamp: string;
+}
+
+// ---------------------------------------------------------------------------
+// Spacing log  (migrated from v1.0.1 spacing_logs sheet)
+// ---------------------------------------------------------------------------
+
+export interface SpacingLog {
+  id: number;
+  spacingId: string;
+  plotCode: string;
+  avgSpacing: number | null;
+  minSpacing: number | null;
+  maxSpacing: number | null;
+  treeCount: number | null;
+  note: string | null;
+  date: string | null;
+  timestamp: string;
+}
+
+// ---------------------------------------------------------------------------
+// Comment  (migrated from v1.0.1 comments sheet)
+// ---------------------------------------------------------------------------
+
+export interface Comment {
+  id: number;
+  commentId: string;
+  logId: string | null;
+  treeCode: string | null;
+  plotCode: string | null;
+  content: string;
+  authorEmail: string | null;
+  authorName: string | null;
+  mentions: string[];
+  createdAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// Notification  (migrated from v1.0.1 notifications sheet)
+// ---------------------------------------------------------------------------
+
+export interface Notification {
+  id: number;
+  notificationId: string;
+  userEmail: string;
+  commentId: string | null;
+  logId: string | null;
+  treeCode: string | null;
+  plotCode: string | null;
+  message: string | null;
+  authorName: string | null;
+  createdAt: string;
+  isRead: boolean;
+}
+
+// ---------------------------------------------------------------------------
 // API response envelope
 // ---------------------------------------------------------------------------
 

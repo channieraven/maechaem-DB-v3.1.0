@@ -98,9 +98,10 @@ webhooksRouter.post("/clerk", async (c) => {
 
     try {
       const db = createDb(c.env);
+      // Insert with extended columns (role defaults to "pending", approved to false).
       await db.execute(sql`
-        INSERT INTO profiles (user_id, email)
-        VALUES (${userId}, ${primaryEmail.email_address})
+        INSERT INTO profiles (user_id, email, role, approved)
+        VALUES (${userId}, ${primaryEmail.email_address}, 'pending', false)
         ON CONFLICT (user_id) DO NOTHING
       `);
       console.log(`Profile created for user: ${userId}`);
