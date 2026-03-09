@@ -1,101 +1,79 @@
 /**
  * App.tsx — Root application component.
  *
- * Handles Clerk authentication state:
- *  - Shows a loading spinner while Clerk initialises.
- *  - Shows the sign-in page for unauthenticated users.
- *  - Renders the Dashboard for authenticated users.
- *
- * Clerk components used here are loaded from the @clerk/clerk-js package
- * which is 100% edge-compatible — no Node.js APIs are used.
+ * Handles Clerk authentication state using @clerk/react (migrated from v3.0.0):
+ *  - Wraps the app in ClerkProvider when a publishable key is configured.
+ *  - Shows a sign-in button for unauthenticated users (SignedOut).
+ *  - Renders the Dashboard for authenticated users (SignedIn).
+ *  - Falls back to rendering the Dashboard directly when no key is set
+ *    (local development without a Clerk account).
  */
-import { useEffect, useState } from "react";
+import { ClerkProvider, SignInButton, useUser } from "@clerk/react";
 import { Dashboard } from "./client/pages/Dashboard";
 
-type AuthState = "loading" | "signed-in" | "signed-out";
+// Inner component — must be rendered inside ClerkProvider to use useUser().
+function AuthGate() {
+  const { isLoaded, isSignedIn } = useUser();
 
-export function App() {
-  const [authState, setAuthState] = useState<AuthState>("loading");
-
-  useEffect(() => {
-    // Read the publishable key injected by Vite from the environment.
-    // Set VITE_CLERK_PUBLISHABLE_KEY in your .env / Pages env vars.
-    const publishableKey = import.meta.env["VITE_CLERK_PUBLISHABLE_KEY"] as string | undefined;
-
-    if (!publishableKey) {
-      // No Clerk key configured — skip auth and go straight to dashboard.
-      // Useful for local development without a Clerk account.
-      console.warn(
-        "[Mae Chaem GIS] VITE_CLERK_PUBLISHABLE_KEY is not set. " +
-          "Authentication is disabled."
-      );
-      setAuthState("signed-in");
-      return;
-    }
-
-    let mounted = true;
-
-    async function initClerk() {
-      try {
-        // Dynamically import clerk-js to keep the initial bundle small.
-        const { Clerk } = await import("@clerk/clerk-js");
-        const clerk = new Clerk(publishableKey!);
-        await clerk.load();
-
-        if (!mounted) return;
-
-        if (clerk.user) {
-          setAuthState("signed-in");
-        } else {
-          setAuthState("signed-out");
-          // Open the Clerk hosted sign-in flow in a modal.
-          clerk.openSignIn({
-            afterSignInUrl: window.location.href,
-          });
-
-          // Listen for sign-in completion.
-          clerk.addListener(({ user }: { user?: unknown }) => {
-            if (user) {
-              setAuthState("signed-in");
-            }
-          });
-        }
-      } catch (err) {
-        console.error("[Mae Chaem GIS] Clerk init failed:", err);
-        // Fall through to the dashboard on auth failure — tighten in production.
-        if (mounted) setAuthState("signed-in");
-      }
-    }
-
-    initClerk();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  if (authState === "loading") {
+  if (!isLoaded) {
     return (
       <div className="flex items-center justify-center h-screen bg-white text-gray-900">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-forest-600 border-t-transparent rounded-full animate-spin" />
+          <div className="w-12 h-12 border-4 border-green-600 border-t-transparent rounded-full animate-spin" />
           <p className="text-sm text-gray-500">กำลังโหลด…</p>
         </div>
       </div>
     );
   }
 
-  if (authState === "signed-out") {
+  if (!isSignedIn) {
     return (
       <div className="flex items-center justify-center h-screen bg-white text-gray-900">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-forest-600 border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm text-gray-500">กำลังเปิดหน้าเข้าสู่ระบบ…</p>
+        <div className="flex flex-col items-center gap-6">
+          <div className="flex items-center gap-2">
+            <svg
+              className="w-6 h-6 text-green-600"
+              fill="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path d="M17 8C8 10 5.9 16.17 3.82 19.09L5.71 21c1-1.23 2.53-2.06 5.79-2.28C14.07 18.5 17 16 17 8z" />
+            </svg>
+            <span className="font-semibold text-gray-800 text-lg tracking-tight">
+              Mae Chaem Agroforestry DB
+            </span>
+          </div>
+          <SignInButton mode="modal">
+            <button className="rounded-full bg-green-700 px-8 py-3 text-base font-semibold text-white hover:bg-green-800 transition-colors shadow">
+              เข้าสู่ระบบ
+            </button>
+          </SignInButton>
         </div>
       </div>
     );
   }
 
   return <Dashboard />;
+}
+
+export function App() {
+  const publishableKey = import.meta.env["VITE_CLERK_PUBLISHABLE_KEY"] as string | undefined;
+
+  if (!publishableKey) {
+    // No Clerk key configured — skip auth and go straight to dashboard.
+    // Useful for local development without a Clerk account.
+    console.warn(
+      "[Mae Chaem GIS] VITE_CLERK_PUBLISHABLE_KEY is not set. " +
+        "Authentication is disabled."
+    );
+    return <Dashboard />;
+  }
+
+  return (
+    <ClerkProvider publishableKey={publishableKey}>
+      <AuthGate />
+    </ClerkProvider>
+  );
 }
 
 export default App;
