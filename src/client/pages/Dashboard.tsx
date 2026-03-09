@@ -14,6 +14,7 @@ import { Map } from "../components/Map";
 import { Sidebar } from "../components/Sidebar";
 import { PlotPanel } from "../components/PlotPanel";
 import { NotificationBell } from "../components/NotificationBell";
+import { ImportDialog } from "../components/ImportDialog";
 import type {
   GeoJsonFeatureCollection,
   PlotProperties,
@@ -75,6 +76,7 @@ export function Dashboard() {
   const [selectedPlot, setSelectedPlot] = useState<PlotProperties | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showImport, setShowImport] = useState(false);
 
   // ----- Fetch plot GeoJSON on mount -----
   useEffect(() => {
@@ -148,6 +150,10 @@ export function Dashboard() {
 
   return (
     <div className="flex flex-col h-screen bg-white text-gray-900">
+      {/* Import dialog */}
+      {showImport && (
+        <ImportDialog onClose={() => setShowImport(false)} />
+      )}
       {/* ── Top bar ── */}
       <header className="flex-none flex items-center gap-3 px-5 py-3 bg-white border-b border-gray-100 shadow-sm z-20">
         <div className="flex items-center gap-2">
@@ -175,6 +181,15 @@ export function Dashboard() {
             </span>
           )}
           {userEmail && <NotificationBell userEmail={userEmail} />}
+          <button
+            type="button"
+            onClick={() => setShowImport(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors"
+            title="นำเข้าข้อมูลต้นไม้จากไฟล์ CSV"
+          >
+            <span>📤</span>
+            <span className="hidden sm:inline">นำเข้าข้อมูล</span>
+          </button>
           <UserButton />
         </div>
       </header>

@@ -40,6 +40,7 @@ import { commentsRouter } from "./routes/comments";
 import { notificationsRouter } from "./routes/notifications";
 import { usersRouter } from "./routes/users";
 import { clerkAuthMiddleware } from "./middleware/clerk";
+import { createClerkClient } from "@clerk/backend";
 import type { Env } from "../db/db";
 
 const app = new Hono<{ Bindings: Env }>();
@@ -92,6 +93,32 @@ app.route("/api/webhooks", webhooksRouter);
 // ---------------------------------------------------------------------------
 
 // Growth log measurements (growth_logs + growth_logs_supp sheets)
+// Import and edit endpoints require authentication to track the editor.
+app.use("/api/growth-logs/import", clerkAuthMiddleware());
+app.use("/api/growth-logs/:logId{[^/]+}", async (c, next) => {
+  if (c.req.method === "PUT") {
+    return clerkAuthMiddleware()(c, next);
+  }
+  return next();
+});
+// Attach verified user's email as a context variable for downstream handlers.
+app.use("/api/growth-logs/*", async (c, next) => {
+  const userId = c.get("userId") as string | undefined;
+  if (userId) {
+    try {
+      const clerk = createClerkClient({ secretKey: c.env.CLERK_SECRET_KEY });
+      const user = await clerk.users.getUser(userId);
+      const email =
+        user.emailAddresses.find((e) => e.id === user.primaryEmailAddressId)
+          ?.emailAddress ?? userId;
+      c.set("userEmail", email);
+    } catch {
+      // Non-fatal — fall back to userId
+      c.set("userEmail", userId);
+    }
+  }
+  return next();
+});
 app.route("/api/growth-logs", growthLogsRouter);
 
 // Tree profiles / coordinate data (trees_profile sheet)

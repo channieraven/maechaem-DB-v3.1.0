@@ -31,6 +31,8 @@ import type { Env } from "../../db/db";
 declare module "hono" {
   interface ContextVariableMap {
     userId: string;
+    /** Primary email of the authenticated user — populated by index.ts middleware. */
+    userEmail: string;
   }
 }
 

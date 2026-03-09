@@ -144,6 +144,7 @@ export interface GrowthLog {
   pricePerHand: number | null;
   targetSheet: string;
   timestamp: string;
+  lastEditedBy: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -213,6 +214,33 @@ export interface Notification {
   authorName: string | null;
   createdAt: string;
   isRead: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// CSV Import
+// ---------------------------------------------------------------------------
+
+/** A single row parsed from the uploaded CSV before import. */
+export interface ImportPreviewRow {
+  treeNumber: number | null;
+  tagLabel: string | null;
+  treeCode: string;
+  speciesName: string | null;
+  plantingSpacing: string | null;
+  dbhCm: number | null;
+  bambooCulms: number | null;
+  bambooDiamCm: number | null;
+  heightM: number | null;
+  flowering: string | null;
+  note: string | null;
+}
+
+/** Summary result returned by the import endpoint. */
+export interface ImportResult {
+  inserted: number;
+  updated: number;
+  skipped: number;
+  errors: string[];
 }
 
 // ---------------------------------------------------------------------------
