@@ -1,11 +1,13 @@
 /**
  * Drizzle ORM schema for Mae Chaem agroforestry database.
  *
- * Migrated from v1.0.1 (Google Apps Script / Sheets backend) to
- * v3.1.0 (Cloudflare Workers + Neon PostgreSQL via Hyperdrive).
+ * v3.1.0 — Cloudflare Workers + Cloudflare D1 (SQLite).
+ * Migrated from Neon PostgreSQL / Hyperdrive to Cloudflare D1 for
+ * fully native Cloudflare storage — no external database required.
  *
  * Tables:
- *  - plots              : GeoJSON plot boundaries (carried over from v3.0.0)
+ *  - plot_boundary_plan : GeoJSON plot boundaries with farmer metadata (map layer)
+ *  - plots              : agroforestry plot metadata
  *  - species_observations: field species counts per plot
  *  - carbon_estimates   : above-ground biomass / carbon stock estimates
  *  - profiles           : user profiles synced from Clerk (v2.1.0 migration)
@@ -17,73 +19,91 @@
  *  - notifications      : in-app notifications for mentions / replies
  */
 import {
-  pgTable,
-  serial,
+  sqliteTable,
+  integer,
   text,
   real,
-  jsonb,
-  timestamp,
-  varchar,
-  integer,
-  boolean,
-} from "drizzle-orm/pg-core";
+} from "drizzle-orm/sqlite-core";
+
+// ---------------------------------------------------------------------------
+// plot_boundary_plan  (GIS map layer — migrated from v3.0.0 PostGIS table)
+// Geometry is stored as a GeoJSON string (TEXT) instead of PostGIS geometry.
+// ---------------------------------------------------------------------------
+
+export const plotBoundaryPlan = sqliteTable("plot_boundary_plan", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  farmerName: text("farmer_name"),
+  /** Unique plot identifier (e.g. "P05") */
+  plotCode: text("plot_code").notNull().unique(),
+  groupNumber: text("group_number"),
+  /** Area in rai (Thai land unit; 1 rai ≈ 0.16 ha) */
+  areaRai: real("area_rai"),
+  /** Area in square metres */
+  areaSqm: real("area_sqm"),
+  /** Thai sub-district (tambon) */
+  tambon: text("tambon"),
+  /** Mean elevation in metres above sea level */
+  elevMean: real("elev_mean"),
+  /** GeoJSON geometry object stored as a JSON text string */
+  geom: text("geom"),
+});
 
 // ---------------------------------------------------------------------------
 // plots
 // ---------------------------------------------------------------------------
 
-export const plots = pgTable("plots", {
-  id: serial("id").primaryKey(),
+export const plots = sqliteTable("plots", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   /** Unique plot identifier (e.g. "MC-2024-001") */
-  plotCode: varchar("plot_code", { length: 50 }).notNull().unique(),
+  plotCode: text("plot_code").notNull().unique(),
   /** Village / sub-district where the plot is located */
-  village: varchar("village", { length: 120 }),
+  village: text("village"),
   /** Name of the plot owner/farmer */
-  ownerName: varchar("owner_name", { length: 200 }),
-  /** GeoJSON Polygon or MultiPolygon geometry stored as JSONB */
-  geometry: jsonb("geometry").notNull(),
+  ownerName: text("owner_name"),
+  /** GeoJSON Polygon or MultiPolygon geometry stored as a JSON text string */
+  geometry: text("geometry").notNull(),
   /** Area in rai (Thai land unit; 1 rai ≈ 0.16 ha) */
   areaRai: real("area_rai"),
   /** Area in hectares (computed field stored for convenience) */
   areaHa: real("area_ha"),
   /** Primary agroforestry system classification */
-  systemType: varchar("system_type", { length: 80 }),
+  systemType: text("system_type"),
   /** Dominant species (comma-separated or first listed) */
   dominantSpecies: text("dominant_species"),
   /** Year the plot was established */
   establishedYear: integer("established_year"),
-  /** Date the plot record was created in this database */
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  /** Date the plot record was last updated */
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  /** Timestamp (ms since epoch) when the record was created */
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+  /** Timestamp (ms since epoch) when the record was last updated */
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
 });
 
 // ---------------------------------------------------------------------------
 // species_observations
 // ---------------------------------------------------------------------------
 
-export const speciesObservations = pgTable("species_observations", {
-  id: serial("id").primaryKey(),
+export const speciesObservations = sqliteTable("species_observations", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   plotId: integer("plot_id")
     .notNull()
     .references(() => plots.id, { onDelete: "cascade" }),
-  speciesName: varchar("species_name", { length: 200 }).notNull(),
-  localName: varchar("local_name", { length: 200 }),
+  speciesName: text("species_name").notNull(),
+  localName: text("local_name"),
   /** Count of individuals observed in the plot */
   count: integer("count"),
   /** Average DBH (diameter at breast height) in cm */
   avgDbhCm: real("avg_dbh_cm"),
   /** Average height in metres */
   avgHeightM: real("avg_height_m"),
-  observedAt: timestamp("observed_at", { withTimezone: true }).defaultNow().notNull(),
+  observedAt: integer("observed_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
 });
 
 // ---------------------------------------------------------------------------
 // carbon_estimates
 // ---------------------------------------------------------------------------
 
-export const carbonEstimates = pgTable("carbon_estimates", {
-  id: serial("id").primaryKey(),
+export const carbonEstimates = sqliteTable("carbon_estimates", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   plotId: integer("plot_id")
     .notNull()
     .references(() => plots.id, { onDelete: "cascade" }),
@@ -92,20 +112,19 @@ export const carbonEstimates = pgTable("carbon_estimates", {
   /** Estimated carbon stock in tCO2e per hectare */
   carbonTco2ePerHa: real("carbon_tco2e_per_ha"),
   /** Methodology / allometric equation used */
-  methodology: varchar("methodology", { length: 120 }),
-  estimatedAt: timestamp("estimated_at", { withTimezone: true }).defaultNow().notNull(),
+  methodology: text("methodology"),
+  estimatedAt: integer("estimated_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
 });
 
 // ---------------------------------------------------------------------------
 // profiles
 // Migrated from v2.1.0 Firebase Cloud Functions (createUserProfile logic).
-// Mirrors the Firestore `profiles` collection document structure, adapted
-// for PostgreSQL.  Role/approval state is the source of truth; it is synced
-// to Clerk public metadata so the JWT carries the latest values.
+// Role/approval state is the source of truth; it is synced to Clerk public
+// metadata so the JWT carries the latest values.
 // ---------------------------------------------------------------------------
 
-export const profiles = pgTable("profiles", {
-  id: serial("id").primaryKey(),
+export const profiles = sqliteTable("profiles", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   /** Clerk user ID — matches `sub` claim in the Clerk JWT. */
   userId: text("user_id").notNull().unique(),
   /** Primary email address sourced from Clerk on user.created. */
@@ -117,69 +136,70 @@ export const profiles = pgTable("profiles", {
    *  "admin"   → full access, can manage users
    *  "pending" → awaiting admin approval
    */
-  role: varchar("role", { length: 50 }).notNull().default("pending"),
+  role: text("role").notNull().default("pending"),
   /**
    * Whether the user has been approved by an admin.
    * First registered user is automatically approved as bootstrap admin.
+   * Stored as INTEGER 0/1; Drizzle maps to boolean automatically.
    */
-  approved: boolean("approved").notNull().default(false),
+  approved: integer("approved", { mode: "boolean" }).notNull().default(false),
   /** Optional: job title / position */
   position: text("position"),
   /** Optional: employer / organisation */
   organization: text("organization"),
   /** Optional: contact phone number */
   phone: text("phone"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
 });
 
 // ---------------------------------------------------------------------------
 // trees_profile  (migrated from the `trees_profile` Google Sheet)
 // ---------------------------------------------------------------------------
 
-export const treesProfile = pgTable("trees_profile", {
-  id: serial("id").primaryKey(),
-  treeCode: varchar("tree_code", { length: 50 }).notNull().unique(),
-  tagLabel: varchar("tag_label", { length: 50 }),
-  plotCode: varchar("plot_code", { length: 50 }).notNull(),
-  speciesCode: varchar("species_code", { length: 50 }),
-  speciesGroup: varchar("species_group", { length: 10 }),
-  speciesName: varchar("species_name", { length: 200 }),
+export const treesProfile = sqliteTable("trees_profile", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  treeCode: text("tree_code").notNull().unique(),
+  tagLabel: text("tag_label"),
+  plotCode: text("plot_code").notNull(),
+  speciesCode: text("species_code"),
+  speciesGroup: text("species_group"),
+  speciesName: text("species_name"),
   treeNumber: integer("tree_number"),
-  rowMain: varchar("row_main", { length: 20 }),
-  rowSub: varchar("row_sub", { length: 20 }),
+  rowMain: text("row_main"),
+  rowSub: text("row_sub"),
   utmX: real("utm_x"),
   utmY: real("utm_y"),
   lat: real("lat"),
   lng: real("lng"),
   note: text("note"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
 });
 
 // ---------------------------------------------------------------------------
 // growth_logs  (migrated from the `growth_logs` Google Sheet)
 // ---------------------------------------------------------------------------
 
-export const growthLogs = pgTable("growth_logs", {
-  id: serial("id").primaryKey(),
-  logId: varchar("log_id", { length: 50 }).notNull().unique(),
-  treeCode: varchar("tree_code", { length: 50 }).notNull(),
-  tagLabel: varchar("tag_label", { length: 50 }),
-  plotCode: varchar("plot_code", { length: 50 }).notNull(),
-  speciesCode: varchar("species_code", { length: 50 }),
-  speciesGroup: varchar("species_group", { length: 10 }),
-  speciesName: varchar("species_name", { length: 200 }),
+export const growthLogs = sqliteTable("growth_logs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  logId: text("log_id").notNull().unique(),
+  treeCode: text("tree_code").notNull(),
+  tagLabel: text("tag_label"),
+  plotCode: text("plot_code").notNull(),
+  speciesCode: text("species_code"),
+  speciesGroup: text("species_group"),
+  speciesName: text("species_name"),
   treeNumber: integer("tree_number"),
-  rowMain: varchar("row_main", { length: 20 }),
-  rowSub: varchar("row_sub", { length: 20 }),
+  rowMain: text("row_main"),
+  rowSub: text("row_sub"),
   // Common measurements
   heightM: real("height_m"),
-  status: varchar("status", { length: 20 }),
-  flowering: varchar("flowering", { length: 10 }),
+  status: text("status"),
+  flowering: text("flowering"),
   note: text("note"),
-  recorder: varchar("recorder", { length: 200 }),
-  surveyDate: varchar("survey_date", { length: 30 }),
+  recorder: text("recorder"),
+  surveyDate: text("survey_date"),
   // Standard (Forest / Rubber / Fruit)
   dbhCm: real("dbh_cm"),
   // Bamboo
@@ -194,82 +214,83 @@ export const growthLogs = pgTable("growth_logs", {
   yieldHands: integer("yield_hands"),
   pricePerHand: real("price_per_hand"),
   /** target_sheet: "growth_logs" | "growth_logs_supp" */
-  targetSheet: varchar("target_sheet", { length: 50 }).notNull().default("growth_logs"),
-  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow().notNull(),
+  targetSheet: text("target_sheet").notNull().default("growth_logs"),
+  timestamp: integer("timestamp", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
   /** Email/userId of the person who last edited this record. */
-  lastEditedBy: varchar("last_edited_by", { length: 200 }),
+  lastEditedBy: text("last_edited_by"),
 });
 
 // ---------------------------------------------------------------------------
 // plot_images  (migrated from the `plot_images` Google Sheet)
 // ---------------------------------------------------------------------------
 
-export const plotImages = pgTable("plot_images", {
-  id: serial("id").primaryKey(),
-  imageId: varchar("image_id", { length: 50 }).notNull().unique(),
-  plotCode: varchar("plot_code", { length: 50 }).notNull(),
+export const plotImages = sqliteTable("plot_images", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  imageId: text("image_id").notNull().unique(),
+  plotCode: text("plot_code").notNull(),
   /** "plan_pre_1" | "plan_pre_2" | "plan_post_1" | "gallery" | "plan_pre" */
-  imageType: varchar("image_type", { length: 50 }),
+  imageType: text("image_type"),
   /** "tree" | "soil" | "atmosphere" | "other" — only when imageType=gallery */
-  galleryCategory: varchar("gallery_category", { length: 50 }),
+  galleryCategory: text("gallery_category"),
   url: text("url").notNull(),
   description: text("description"),
-  uploader: varchar("uploader", { length: 200 }),
-  date: varchar("date", { length: 30 }),
-  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow().notNull(),
+  uploader: text("uploader"),
+  date: text("date"),
+  timestamp: integer("timestamp", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
 });
 
 // ---------------------------------------------------------------------------
 // spacing_logs  (migrated from the `spacing_logs` Google Sheet)
 // ---------------------------------------------------------------------------
 
-export const spacingLogs = pgTable("spacing_logs", {
-  id: serial("id").primaryKey(),
-  spacingId: varchar("spacing_id", { length: 50 }).notNull().unique(),
-  plotCode: varchar("plot_code", { length: 50 }).notNull(),
+export const spacingLogs = sqliteTable("spacing_logs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  spacingId: text("spacing_id").notNull().unique(),
+  plotCode: text("plot_code").notNull(),
   avgSpacing: real("avg_spacing"),
   minSpacing: real("min_spacing"),
   maxSpacing: real("max_spacing"),
   treeCount: integer("tree_count"),
   note: text("note"),
-  date: varchar("date", { length: 30 }),
-  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow().notNull(),
+  date: text("date"),
+  timestamp: integer("timestamp", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
 });
 
 // ---------------------------------------------------------------------------
 // comments  (migrated from the `comments` Google Sheet)
 // ---------------------------------------------------------------------------
 
-export const comments = pgTable("comments", {
-  id: serial("id").primaryKey(),
-  commentId: varchar("comment_id", { length: 50 }).notNull().unique(),
-  logId: varchar("log_id", { length: 50 }),
-  treeCode: varchar("tree_code", { length: 50 }),
-  plotCode: varchar("plot_code", { length: 50 }),
+export const comments = sqliteTable("comments", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  commentId: text("comment_id").notNull().unique(),
+  logId: text("log_id"),
+  treeCode: text("tree_code"),
+  plotCode: text("plot_code"),
   content: text("content").notNull(),
-  authorEmail: varchar("author_email", { length: 200 }),
-  authorName: varchar("author_name", { length: 200 }),
+  authorEmail: text("author_email"),
+  authorName: text("author_name"),
   /** JSON array of mentioned user emails, e.g. '["a@b.com"]' */
   mentions: text("mentions").notNull().default("[]"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
 });
 
 // ---------------------------------------------------------------------------
 // notifications  (migrated from the `notifications` Google Sheet)
 // ---------------------------------------------------------------------------
 
-export const notifications = pgTable("notifications", {
-  id: serial("id").primaryKey(),
-  notificationId: varchar("notification_id", { length: 50 }).notNull().unique(),
-  userEmail: varchar("user_email", { length: 200 }).notNull(),
-  commentId: varchar("comment_id", { length: 50 }),
-  logId: varchar("log_id", { length: 50 }),
-  treeCode: varchar("tree_code", { length: 50 }),
-  plotCode: varchar("plot_code", { length: 50 }),
+export const notifications = sqliteTable("notifications", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  notificationId: text("notification_id").notNull().unique(),
+  userEmail: text("user_email").notNull(),
+  commentId: text("comment_id"),
+  logId: text("log_id"),
+  treeCode: text("tree_code"),
+  plotCode: text("plot_code"),
   message: text("message"),
-  authorName: varchar("author_name", { length: 200 }),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  isRead: boolean("is_read").notNull().default(false),
+  authorName: text("author_name"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+  /** Stored as INTEGER 0/1; Drizzle maps to boolean automatically. */
+  isRead: integer("is_read", { mode: "boolean" }).notNull().default(false),
 });
 
 // TypeScript types inferred from schema

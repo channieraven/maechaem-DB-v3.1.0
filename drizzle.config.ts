@@ -5,20 +5,21 @@ import { defineConfig } from "drizzle-kit";
  *
  * Used by:
  *   npm run db:generate  → generate SQL migration files in ./drizzle/migrations/
- *   npm run db:migrate   → apply pending migrations to the database
- *   npm run db:studio    → open Drizzle Studio visual DB editor
  *
- * The DATABASE_URL environment variable must point to your Neon PostgreSQL
- * connection string. For local development, copy .env.example to .env and
- * fill in the value.
+ * Migrations are applied to Cloudflare D1 using wrangler:
+ *   # Local development
+ *   wrangler d1 migrations apply maechaem-db --local
+ *
+ *   # Production
+ *   wrangler d1 migrations apply maechaem-db
+ *
+ * Ensure CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_D1_DATABASE_ID are set in
+ * your environment when running migrations against production D1.
  */
 export default defineConfig({
   schema: "./src/db/schema.ts",
   out: "./drizzle/migrations",
-  dialect: "postgresql",
-  dbCredentials: {
-    url: process.env["DATABASE_URL"]!,
-  },
+  dialect: "sqlite",
   verbose: true,
   strict: true,
 });

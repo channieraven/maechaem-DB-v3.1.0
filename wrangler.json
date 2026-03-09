@@ -14,10 +14,12 @@
     "not_found_handling": "single-page-application"
   },
 
-  "hyperdrive": [
+  "d1_databases": [
     {
-      "binding": "HYPERDRIVE",
-      "id": "50ebedaa730f4cb890a07b7132beb18c"
+      "binding": "DB",
+      "database_name": "maechaem-db",
+      "database_id": "<YOUR_D1_DATABASE_ID>",
+      "migrations_dir": "drizzle/migrations"
     }
   ],
 

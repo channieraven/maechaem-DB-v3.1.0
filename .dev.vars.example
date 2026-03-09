@@ -1,11 +1,14 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # .dev.vars — Wrangler local dev secrets
 # ─────────────────────────────────────────────────────────────────────────────
-# Wrangler reads this file during `wrangler pages dev` to simulate secrets
+# Wrangler reads this file during `wrangler dev` to simulate secrets
 # that would be set via `wrangler secret put` in production.
 # NEVER commit this file — it is listed in .gitignore.
 # Copy .env.example and adapt for Wrangler's format (KEY=VALUE, no export).
+#
+# D1 database bindings are configured in wrangler.json and do NOT need to be
+# listed here — Wrangler automatically creates a local SQLite file for D1
+# when running `wrangler dev`.
 
-DATABASE_URL=postgresql://USER:PASSWORD@ep-xxxx.region.aws.neon.tech/neondb?sslmode=require
 CLERK_PUBLISHABLE_KEY=pk_test_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 CLERK_SECRET_KEY=sk_test_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx

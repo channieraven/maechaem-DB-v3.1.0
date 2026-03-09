@@ -1,21 +1,18 @@
 /**
- * db.ts — Drizzle ORM database connection.
+ * db.ts — Drizzle ORM database connection for Cloudflare D1.
  *
- * Dual-mode connection strategy:
- * ┌────────────────┬────────────────────────────────────────────────────────┐
- * │  Environment   │  Connection                                            │
- * ├────────────────┼────────────────────────────────────────────────────────┤
- * │  Local dev     │  Direct Neon PostgreSQL URL from DATABASE_URL env var  │
- * │  Production    │  Cloudflare Hyperdrive binding (HYPERDRIVE.connectionString) │
- * └────────────────┴────────────────────────────────────────────────────────┘
+ * Uses Cloudflare D1 (SQLite) as the database backend — fully native to
+ * Cloudflare Workers, no external database required.
  *
- * Hyperdrive transparently provides:
- *  - Connection pooling (no cold-start penalty)
- *  - Regional caching for read queries
- *  - Automatic TLS termination at the edge
+ * D1 is available as a binding named `DB` in wrangler.json.
+ * In local development (`wrangler dev`), Wrangler automatically creates a
+ * local SQLite file that mirrors the D1 API.
+ *
+ * Migrations are stored in `./drizzle/migrations/` and can be applied with:
+ *   wrangler d1 execute maechaem-db --local --file=drizzle/migrations/0000_d1_schema.sql
+ *   wrangler d1 execute maechaem-db --file=drizzle/migrations/0000_d1_schema.sql
  */
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./schema";
 
 export type {
@@ -44,8 +41,11 @@ export type {
  * Extend this interface as you add more bindings in wrangler.json.
  */
 export interface Env {
-  /** Cloudflare Hyperdrive binding — available in production Workers/Pages. */
-  HYPERDRIVE: Hyperdrive;
+  /**
+   * Cloudflare D1 database binding — available in both production and local
+   * `wrangler dev`.  Declared as `d1_databases` in wrangler.json.
+   */
+  DB: D1Database;
   /**
    * Static assets binding — serves the compiled Vite SPA from the `dist/`
    * directory.  Exposed by setting `assets.binding = "ASSETS"` in wrangler.json.
@@ -65,12 +65,6 @@ export interface Env {
    * Used to verify incoming webhook payloads from Clerk.
    */
   CLERK_WEBHOOK_SECRET?: string;
-  /**
-   * Direct Neon PostgreSQL connection URL.
-   * Used for local development (`npm run dev`) and Drizzle migrations.
-   * In production this is **not** needed — Hyperdrive provides the URL.
-   */
-  DATABASE_URL?: string;
   ENVIRONMENT?: string;
 }
 
@@ -85,35 +79,13 @@ export interface Env {
  * // Inside a Hono route handler:
  * app.get("/api/plots", async (c) => {
  *   const db = createDb(c.env);
- *   const plots = await db.select().from(schema.plots);
- *   return c.json(plots);
+ *   const rows = await db.select().from(schema.plots);
+ *   return c.json(rows);
  * });
  * ```
  */
 export function createDb(env: Env) {
-  // Prefer Hyperdrive in production; fall back to direct URL locally.
-  const connectionString =
-    env.HYPERDRIVE?.connectionString ?? env.DATABASE_URL;
-
-  if (!connectionString) {
-    throw new Error(
-      "No database connection available. " +
-        "Set DATABASE_URL for local development or configure a Hyperdrive binding."
-    );
-  }
-
-  // `postgres` (postgres-js) is the recommended driver for both
-  // Hyperdrive and direct Neon connections.
-  // - max: 1  → important for serverless/edge: never hold multiple connections
-  //             per worker invocation; Hyperdrive handles pooling externally.
-  // - prepare: false → required for Neon/PgBouncer compatibility; Hyperdrive
-  //                    also benefits from this on short-lived edge requests.
-  const client = postgres(connectionString, {
-    max: 1,
-    prepare: false,
-  });
-
-  return drizzle(client, { schema });
+  return drizzle(env.DB, { schema });
 }
 
 export type Database = ReturnType<typeof createDb>;
