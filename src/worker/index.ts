@@ -8,6 +8,12 @@
  * │  │  dist/       │    │  _worker.js  (this file, bundled by Wrangler)│ │
  * │  │  (Vite SPA)  │    │  ├─ GET /api/plots          → Drizzle + Hyperdrive│ │
  * │  │              │    │  ├─ GET /api/plots/:id      → single plot detail │ │
+ * │  │              │    │  ├─ GET/POST/DELETE /api/growth-logs          │ │
+ * │  │              │    │  ├─ GET/POST/DELETE /api/trees                │ │
+ * │  │              │    │  ├─ GET/POST/PUT/DELETE /api/images           │ │
+ * │  │              │    │  ├─ GET/POST/DELETE /api/spacing-logs         │ │
+ * │  │              │    │  ├─ GET/POST/DELETE /api/comments             │ │
+ * │  │              │    │  ├─ GET/PUT /api/notifications                │ │
  * │  │              │    │  ├─ GET /api/users           → list profiles (admin)│ │
  * │  │              │    │  ├─ PUT /api/users/:id/role  → sync role + claims  │ │
  * │  │              │    │  └─ *  (fallthrough)         → serve SPA           │ │
@@ -26,6 +32,12 @@ import { logger } from "hono/logger";
 import { prettyJSON } from "hono/pretty-json";
 import { plotsRouter } from "./routes/plots";
 import { webhooksRouter } from "./routes/webhooks";
+import { growthLogsRouter } from "./routes/growth-logs";
+import { treesRouter } from "./routes/trees";
+import { imagesRouter } from "./routes/images";
+import { spacingLogsRouter } from "./routes/spacing-logs";
+import { commentsRouter } from "./routes/comments";
+import { notificationsRouter } from "./routes/notifications";
 import { usersRouter } from "./routes/users";
 import { clerkAuthMiddleware } from "./middleware/clerk";
 import type { Env } from "../db/db";
@@ -74,6 +86,28 @@ app.route("/api/plots", plotsRouter);
 
 // Clerk webhook — public, signature-verified internally by the handler.
 app.route("/api/webhooks", webhooksRouter);
+
+// ---------------------------------------------------------------------------
+// Data routes — migrated from v1.0.1 Google Apps Script functions
+// ---------------------------------------------------------------------------
+
+// Growth log measurements (growth_logs + growth_logs_supp sheets)
+app.route("/api/growth-logs", growthLogsRouter);
+
+// Tree profiles / coordinate data (trees_profile sheet)
+app.route("/api/trees", treesRouter);
+
+// Plot images (plot_images sheet)
+app.route("/api/images", imagesRouter);
+
+// Inter-tree spacing surveys (spacing_logs sheet)
+app.route("/api/spacing-logs", spacingLogsRouter);
+
+// Comments on growth log entries (comments sheet)
+app.route("/api/comments", commentsRouter);
+
+// In-app notifications (notifications sheet)
+app.route("/api/notifications", notificationsRouter);
 
 // ---------------------------------------------------------------------------
 // Protected routes (require valid Clerk session)

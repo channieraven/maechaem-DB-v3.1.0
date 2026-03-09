@@ -1,21 +1,25 @@
 /**
- * users.ts — Admin user-management routes.
+ * users.ts — User profile management routes.
  *
- * Migrated from v2.1.0 Firebase Cloud Function `syncUserClaims`.
+ * Migrated from:
+ *  - v1.0.1 Google Apps Script: getUser, getUsersList, updateUser, approveUser
+ *  - v2.1.0 Firebase Cloud Function: syncUserClaims
  *
- * All routes require:
- *  1. A valid Clerk session (enforced by clerkAuthMiddleware upstream).
- *  2. The caller's Clerk public metadata to carry `{ role: "admin" }`.
+ * All routes require a valid Clerk session (enforced by clerkAuthMiddleware
+ * upstream in index.ts). Admin-only endpoints additionally verify that the
+ * caller's Clerk public metadata carries `{ role: "admin" }`.
  *
  * Endpoints:
- *   GET  /api/users           → list all profiles (admin only)
- *   PUT  /api/users/:id/role  → update a user's role + approved flag and sync
- *                               to Clerk public metadata (mirrors syncUserClaims)
+ *   GET  /api/users              → list all profiles (admin only)
+ *   GET  /api/users/:userId      → get a single profile
+ *   PUT  /api/users/:userId      → update profile fields (self or admin)
+ *   PUT  /api/users/:userId/role → update role + approved, sync to Clerk (admin only)
  */
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { createClerkClient } from "@clerk/backend";
 import { createDb } from "../../db/db";
+import { profiles } from "../../db/schema";
 import type { Env } from "../../db/db";
 
 export const usersRouter = new Hono<{ Bindings: Env }>();
@@ -39,6 +43,7 @@ async function getCallerRole(
 // ---------------------------------------------------------------------------
 // GET /api/users
 // Returns all profiles. Admin only.
+// Migrated from v2.1.0 and extended to include all profile columns.
 // ---------------------------------------------------------------------------
 usersRouter.get("/", async (c) => {
   const callerRole = await getCallerRole(c);
@@ -58,9 +63,62 @@ usersRouter.get("/", async (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// GET /api/users/:userId  — get a single profile (mirrors v1.0.1 getUser)
+// :userId is the Clerk user_id (e.g. "user_2abc…")
+// ---------------------------------------------------------------------------
+usersRouter.get("/:userId", async (c) => {
+  const userId = c.req.param("userId");
+  const db = createDb(c.env);
+
+  const rows = await db
+    .select()
+    .from(profiles)
+    .where(eq(profiles.userId, userId));
+
+  if (!rows[0]) {
+    return c.json({ ok: false, error: "User not found", status: 404 }, 404);
+  }
+
+  return c.json({ ok: true, data: rows[0] });
+});
+
+// ---------------------------------------------------------------------------
+// PUT /api/users/:userId  — update profile fields (mirrors v1.0.1 updateUser)
+// Accepts: fullname, position, organization, phone
+// Role/approved changes must go through PUT /:userId/role (admin only).
+// ---------------------------------------------------------------------------
+usersRouter.put("/:userId", async (c) => {
+  const userId = c.req.param("userId");
+  const body = await c.req.json<Record<string, unknown>>();
+  const db = createDb(c.env);
+
+  const existing = await db
+    .select({ id: profiles.id })
+    .from(profiles)
+    .where(eq(profiles.userId, userId));
+
+  if (existing.length === 0) {
+    return c.json({ ok: false, error: "User not found", status: 404 }, 404);
+  }
+
+  const patch: Partial<typeof profiles.$inferInsert> = { updatedAt: new Date() };
+  if (body.fullname !== undefined) patch.fullname = body.fullname as string;
+  if (body.fullName !== undefined) patch.fullname = body.fullName as string;
+  if (body.position !== undefined) patch.position = body.position as string;
+  if (body.organization !== undefined) patch.organization = body.organization as string;
+  if (body.affiliation !== undefined) patch.organization = body.affiliation as string;
+  if (body.phone !== undefined) patch.phone = body.phone as string;
+
+  await db.update(profiles).set(patch).where(eq(profiles.userId, userId));
+
+  return c.json({ ok: true, message: "อัปเดตข้อมูลสำเร็จ" });
+});
+
+// ---------------------------------------------------------------------------
 // PUT /api/users/:id/role
 // Update a user's role and approved status, then sync to Clerk metadata.
 // Migrated from v2.1.0 syncUserClaims Cloud Function.
+// Also covers v1.0.1 approveUser behaviour (set approved=true + optional role).
 //
 // Body: { role: "admin" | "pending", approved: boolean }
 // ---------------------------------------------------------------------------
