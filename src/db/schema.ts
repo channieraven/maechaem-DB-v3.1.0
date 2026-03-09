@@ -5,7 +5,7 @@
  * - Stores individual agroforestry plot records with GeoJSON geometry
  *   and metadata about the plot, owner, and measurement data.
  */
-import { pgTable, serial, text, real, jsonb, timestamp, varchar, integer } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, real, jsonb, timestamp, varchar, integer, boolean } from "drizzle-orm/pg-core";
 
 // ---------------------------------------------------------------------------
 // plots
@@ -75,8 +75,47 @@ export const carbonEstimates = pgTable("carbon_estimates", {
   estimatedAt: timestamp("estimated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+// ---------------------------------------------------------------------------
+// profiles
+// Migrated from v2.1.0 Firebase Cloud Functions (createUserProfile logic).
+// Mirrors the Firestore `profiles` collection document structure, adapted
+// for PostgreSQL.  Role/approval state is the source of truth; it is synced
+// to Clerk public metadata so the JWT carries the latest values.
+// ---------------------------------------------------------------------------
+
+export const profiles = pgTable("profiles", {
+  id: serial("id").primaryKey(),
+  /** Clerk user ID — matches `sub` claim in the Clerk JWT. */
+  userId: text("user_id").notNull().unique(),
+  /** Primary email address sourced from Clerk on user.created. */
+  email: text("email").notNull(),
+  /** Display name (from Clerk firstName+lastName or email prefix). */
+  fullname: text("fullname"),
+  /**
+   * Access role — mirrors v2.1.0 Firestore field.
+   *  "admin"   → full access, can manage users
+   *  "pending" → awaiting admin approval
+   */
+  role: varchar("role", { length: 50 }).notNull().default("pending"),
+  /**
+   * Whether the user has been approved by an admin.
+   * First registered user is automatically approved as bootstrap admin.
+   */
+  approved: boolean("approved").notNull().default(false),
+  /** Optional: job title / position */
+  position: text("position"),
+  /** Optional: employer / organisation */
+  organization: text("organization"),
+  /** Optional: contact phone number */
+  phone: text("phone"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 // TypeScript types inferred from schema
 export type Plot = typeof plots.$inferSelect;
 export type NewPlot = typeof plots.$inferInsert;
 export type SpeciesObservation = typeof speciesObservations.$inferSelect;
 export type CarbonEstimate = typeof carbonEstimates.$inferSelect;
+export type Profile = typeof profiles.$inferSelect;
+export type NewProfile = typeof profiles.$inferInsert;
