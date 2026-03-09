@@ -24,11 +24,11 @@ export const growthLogsRouter = new Hono<{ Bindings: Env }>();
 // GET /api/growth-logs[?plot_code=xxx&target_sheet=xxx]
 // ---------------------------------------------------------------------------
 growthLogsRouter.get("/", async (c) => {
-  const db = createDb(c.env);
   const plotCode = c.req.query("plot_code");
   const targetSheet = c.req.query("target_sheet");
 
   try {
+    const db = createDb(c.env);
     let rows;
     if (plotCode && targetSheet) {
       rows = await db
