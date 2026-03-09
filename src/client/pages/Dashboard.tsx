@@ -26,7 +26,7 @@ import type { FlyToTarget } from "../components/Map";
 // Geometry centre helper
 // ---------------------------------------------------------------------------
 
-function getGeometryCenter(geometry: GeoJsonGeometry): FlyToTarget | null {
+function getGeometryBounds(geometry: GeoJsonGeometry): FlyToTarget | null {
   let coords: number[][] = [];
 
   if (geometry.type === "Polygon") {
@@ -39,10 +39,14 @@ function getGeometryCenter(geometry: GeoJsonGeometry): FlyToTarget | null {
 
   const lngs = coords.map((c) => c[0] ?? 0);
   const lats = coords.map((c) => c[1] ?? 0);
+  const west = Math.min(...lngs);
+  const east = Math.max(...lngs);
+  const south = Math.min(...lats);
+  const north = Math.max(...lats);
   return {
-    longitude: (Math.min(...lngs) + Math.max(...lngs)) / 2,
-    latitude: (Math.min(...lats) + Math.max(...lats)) / 2,
-    zoom: 15,
+    longitude: (west + east) / 2,
+    latitude: (south + north) / 2,
+    bounds: [[west, south], [east, north]],
   };
 }
 
@@ -103,8 +107,8 @@ export function Dashboard() {
       setActiveIndex(index);
       setSelectedPlot(feature.properties);
       if (feature.geometry) {
-        const center = getGeometryCenter(feature.geometry);
-        if (center) setFlyToTarget({ ...center });
+        const target = getGeometryBounds(feature.geometry);
+        if (target) setFlyToTarget({ ...target });
       }
     },
     [plotsData]
