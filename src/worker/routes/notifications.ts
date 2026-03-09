@@ -30,14 +30,22 @@ notificationsRouter.get("/", async (c) => {
     );
   }
 
-  const db = createDb(c.env);
-  const rows = await db
-    .select()
-    .from(notifications)
-    .where(eq(notifications.userEmail, userEmail))
-    .orderBy(notifications.createdAt);
+  try {
+    const db = createDb(c.env);
+    const rows = await db
+      .select()
+      .from(notifications)
+      .where(eq(notifications.userEmail, userEmail))
+      .orderBy(notifications.createdAt);
 
-  return c.json({ ok: true, data: rows });
+    return c.json({ ok: true, data: rows });
+  } catch (err) {
+    console.error("GET /api/notifications error:", err);
+    return c.json(
+      { ok: false, error: "ไม่สามารถโหลดการแจ้งเตือนได้", status: 500 },
+      500
+    );
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -53,13 +61,21 @@ notificationsRouter.put("/read-all", async (c) => {
     );
   }
 
-  const db = createDb(c.env);
-  await db
-    .update(notifications)
-    .set({ isRead: true })
-    .where(eq(notifications.userEmail, userEmail));
+  try {
+    const db = createDb(c.env);
+    await db
+      .update(notifications)
+      .set({ isRead: true })
+      .where(eq(notifications.userEmail, userEmail));
 
-  return c.json({ ok: true });
+    return c.json({ ok: true });
+  } catch (err) {
+    console.error("PUT /api/notifications/read-all error:", err);
+    return c.json(
+      { ok: false, error: "ไม่สามารถอัปเดตการแจ้งเตือนได้", status: 500 },
+      500
+    );
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -67,17 +83,25 @@ notificationsRouter.put("/read-all", async (c) => {
 // ---------------------------------------------------------------------------
 notificationsRouter.put("/:notificationId/read", async (c) => {
   const notificationId = c.req.param("notificationId");
-  const db = createDb(c.env);
 
-  const result = await db
-    .update(notifications)
-    .set({ isRead: true })
-    .where(eq(notifications.notificationId, notificationId))
-    .returning({ id: notifications.id });
+  try {
+    const db = createDb(c.env);
+    const result = await db
+      .update(notifications)
+      .set({ isRead: true })
+      .where(eq(notifications.notificationId, notificationId))
+      .returning({ id: notifications.id });
 
-  if (result.length === 0) {
-    return c.json({ ok: false, error: "Notification not found", status: 404 }, 404);
+    if (result.length === 0) {
+      return c.json({ ok: false, error: "Notification not found", status: 404 }, 404);
+    }
+
+    return c.json({ ok: true });
+  } catch (err) {
+    console.error("PUT /api/notifications/:id/read error:", err);
+    return c.json(
+      { ok: false, error: "ไม่สามารถอัปเดตการแจ้งเตือนได้", status: 500 },
+      500
+    );
   }
-
-  return c.json({ ok: true });
 });

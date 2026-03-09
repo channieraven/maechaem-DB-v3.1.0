@@ -32,45 +32,53 @@ export const plotsRouter = new Hono<{ Bindings: Env }>();
 plotsRouter.get("/", async (c) => {
   const db = createDb(c.env);
 
-  const rows = await db.execute(sql`
-    SELECT
-      id,
-      farmer_name,
-      plot_code,
-      group_number,
-      area_rai,
-      area_sqm,
-      tambon,
-      elev_mean,
-      ST_AsGeoJSON(geom)::json AS geometry
-    FROM plot_boundary_plan
-    WHERE geom IS NOT NULL
-    ORDER BY plot_code
-  `);
+  try {
+    const rows = await db.execute(sql`
+      SELECT
+        id,
+        farmer_name,
+        plot_code,
+        group_number,
+        area_rai,
+        area_sqm,
+        tambon,
+        elev_mean,
+        ST_AsGeoJSON(geom)::json AS geometry
+      FROM plot_boundary_plan
+      WHERE geom IS NOT NULL
+      ORDER BY plot_code
+    `);
 
-  const features: GeoJsonFeature<PlotProperties>[] = rows.map((row) => ({
-    type: "Feature",
-    id: row.id as number,
-    geometry: row.geometry as GeoJsonGeometry,
-    properties: {
+    const features: GeoJsonFeature<PlotProperties>[] = rows.map((row) => ({
+      type: "Feature",
       id: row.id as number,
-      plotCode: row.plot_code as string,
-      farmerName: (row.farmer_name as string | null) ?? null,
-      groupNumber: (row.group_number as string | null) ?? null,
-      areaRai: row.area_rai != null ? Number(row.area_rai) : null,
-      areaSqm: row.area_sqm != null ? Number(row.area_sqm) : null,
-      tambon: (row.tambon as string | null) ?? null,
-      elevMean: row.elev_mean != null ? Number(row.elev_mean) : null,
-    },
-  }));
+      geometry: row.geometry as GeoJsonGeometry,
+      properties: {
+        id: row.id as number,
+        plotCode: row.plot_code as string,
+        farmerName: (row.farmer_name as string | null) ?? null,
+        groupNumber: (row.group_number as string | null) ?? null,
+        areaRai: row.area_rai != null ? Number(row.area_rai) : null,
+        areaSqm: row.area_sqm != null ? Number(row.area_sqm) : null,
+        tambon: (row.tambon as string | null) ?? null,
+        elevMean: row.elev_mean != null ? Number(row.elev_mean) : null,
+      },
+    }));
 
-  const collection: GeoJsonFeatureCollection<PlotProperties> = {
-    type: "FeatureCollection",
-    features,
-  };
+    const collection: GeoJsonFeatureCollection<PlotProperties> = {
+      type: "FeatureCollection",
+      features,
+    };
 
-  c.header("Cache-Control", "public, max-age=60, s-maxage=300");
-  return c.json({ ok: true, data: collection });
+    c.header("Cache-Control", "public, max-age=60, s-maxage=300");
+    return c.json({ ok: true, data: collection });
+  } catch (err) {
+    console.error("GET /api/plots error:", err);
+    return c.json(
+      { ok: false, error: "ไม่สามารถโหลดข้อมูลแปลงได้", status: 500 },
+      500
+    );
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -86,39 +94,48 @@ plotsRouter.get("/:id", async (c) => {
   }
 
   const db = createDb(c.env);
-  const rows = await db.execute(sql`
-    SELECT
-      id,
-      farmer_name,
-      plot_code,
-      group_number,
-      area_rai,
-      area_sqm,
-      tambon,
-      elev_mean,
-      ST_AsGeoJSON(geom)::json AS geometry
-    FROM plot_boundary_plan
-    WHERE id = ${id}
-      AND geom IS NOT NULL
-  `);
 
-  const row = rows[0];
-  if (!row) {
-    return c.json({ ok: false, error: "Plot not found", status: 404 }, 404);
+  try {
+    const rows = await db.execute(sql`
+      SELECT
+        id,
+        farmer_name,
+        plot_code,
+        group_number,
+        area_rai,
+        area_sqm,
+        tambon,
+        elev_mean,
+        ST_AsGeoJSON(geom)::json AS geometry
+      FROM plot_boundary_plan
+      WHERE id = ${id}
+        AND geom IS NOT NULL
+    `);
+
+    const row = rows[0];
+    if (!row) {
+      return c.json({ ok: false, error: "Plot not found", status: 404 }, 404);
+    }
+
+    const detail: PlotDetail = {
+      id: row.id as number,
+      plotCode: row.plot_code as string,
+      farmerName: (row.farmer_name as string | null) ?? null,
+      groupNumber: (row.group_number as string | null) ?? null,
+      areaRai: row.area_rai != null ? Number(row.area_rai) : null,
+      areaSqm: row.area_sqm != null ? Number(row.area_sqm) : null,
+      tambon: (row.tambon as string | null) ?? null,
+      elevMean: row.elev_mean != null ? Number(row.elev_mean) : null,
+      geometry: row.geometry as GeoJsonGeometry,
+    };
+
+    c.header("Cache-Control", "public, max-age=60, s-maxage=300");
+    return c.json({ ok: true, data: detail });
+  } catch (err) {
+    console.error("GET /api/plots/:id error:", err);
+    return c.json(
+      { ok: false, error: "ไม่สามารถโหลดข้อมูลแปลงได้", status: 500 },
+      500
+    );
   }
-
-  const detail: PlotDetail = {
-    id: row.id as number,
-    plotCode: row.plot_code as string,
-    farmerName: (row.farmer_name as string | null) ?? null,
-    groupNumber: (row.group_number as string | null) ?? null,
-    areaRai: row.area_rai != null ? Number(row.area_rai) : null,
-    areaSqm: row.area_sqm != null ? Number(row.area_sqm) : null,
-    tambon: (row.tambon as string | null) ?? null,
-    elevMean: row.elev_mean != null ? Number(row.elev_mean) : null,
-    geometry: row.geometry as GeoJsonGeometry,
-  };
-
-  c.header("Cache-Control", "public, max-age=60, s-maxage=300");
-  return c.json({ ok: true, data: detail });
 });

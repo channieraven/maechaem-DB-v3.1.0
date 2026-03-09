@@ -67,6 +67,18 @@ app.use(
 app.use("/api/*", prettyJSON());
 
 // ---------------------------------------------------------------------------
+// Global error handler — ensures all unhandled errors return JSON, not HTML.
+// This catches any exception that escapes a route handler's own try-catch.
+// ---------------------------------------------------------------------------
+app.onError((err, c) => {
+  console.error("Unhandled error:", err);
+  return c.json(
+    { ok: false, error: "เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์", status: 500 },
+    500
+  );
+});
+
+// ---------------------------------------------------------------------------
 // Public routes
 // ---------------------------------------------------------------------------
 

@@ -25,15 +25,23 @@ treesRouter.get("/", async (c) => {
   const db = createDb(c.env);
   const plotCode = c.req.query("plot_code");
 
-  const rows = plotCode
-    ? await db
-        .select()
-        .from(treesProfile)
-        .where(eq(treesProfile.plotCode, plotCode))
-        .orderBy(treesProfile.treeCode)
-    : await db.select().from(treesProfile).orderBy(treesProfile.treeCode);
+  try {
+    const rows = plotCode
+      ? await db
+          .select()
+          .from(treesProfile)
+          .where(eq(treesProfile.plotCode, plotCode))
+          .orderBy(treesProfile.treeCode)
+      : await db.select().from(treesProfile).orderBy(treesProfile.treeCode);
 
-  return c.json({ ok: true, data: rows });
+    return c.json({ ok: true, data: rows });
+  } catch (err) {
+    console.error("GET /api/trees error:", err);
+    return c.json(
+      { ok: false, error: "ไม่สามารถโหลดข้อมูลต้นไม้ได้", status: 500 },
+      500
+    );
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -43,23 +51,36 @@ treesRouter.get("/:treeCode", async (c) => {
   const treeCode = c.req.param("treeCode");
   const db = createDb(c.env);
 
-  const rows = await db
-    .select()
-    .from(treesProfile)
-    .where(eq(treesProfile.treeCode, treeCode));
+  try {
+    const rows = await db
+      .select()
+      .from(treesProfile)
+      .where(eq(treesProfile.treeCode, treeCode));
 
-  if (!rows[0]) {
-    return c.json({ ok: false, error: "Tree not found", status: 404 }, 404);
+    if (!rows[0]) {
+      return c.json({ ok: false, error: "Tree not found", status: 404 }, 404);
+    }
+
+    return c.json({ ok: true, data: rows[0] });
+  } catch (err) {
+    console.error("GET /api/trees/:treeCode error:", err);
+    return c.json(
+      { ok: false, error: "ไม่สามารถโหลดข้อมูลต้นไม้ได้", status: 500 },
+      500
+    );
   }
-
-  return c.json({ ok: true, data: rows[0] });
 });
 
 // ---------------------------------------------------------------------------
 // POST /api/trees  — upsert by tree_code (mirrors addTreeProfile)
 // ---------------------------------------------------------------------------
 treesRouter.post("/", async (c) => {
-  const body = await c.req.json<Record<string, unknown>>();
+  let body: Record<string, unknown>;
+  try {
+    body = await c.req.json<Record<string, unknown>>();
+  } catch {
+    return c.json({ ok: false, error: "Invalid JSON body", status: 400 }, 400);
+  }
   const db = createDb(c.env);
 
   const treeCode = body.tree_code as string;
@@ -85,21 +106,29 @@ treesRouter.post("/", async (c) => {
     updatedAt: new Date(),
   };
 
-  const existing = await db
-    .select({ id: treesProfile.id })
-    .from(treesProfile)
-    .where(eq(treesProfile.treeCode, treeCode));
-
-  if (existing.length > 0) {
-    await db
-      .update(treesProfile)
-      .set(values)
+  try {
+    const existing = await db
+      .select({ id: treesProfile.id })
+      .from(treesProfile)
       .where(eq(treesProfile.treeCode, treeCode));
-    return c.json({ ok: true, action: "updated", treeCode });
-  }
 
-  await db.insert(treesProfile).values(values);
-  return c.json({ ok: true, action: "appended", treeCode }, 201);
+    if (existing.length > 0) {
+      await db
+        .update(treesProfile)
+        .set(values)
+        .where(eq(treesProfile.treeCode, treeCode));
+      return c.json({ ok: true, action: "updated", treeCode });
+    }
+
+    await db.insert(treesProfile).values(values);
+    return c.json({ ok: true, action: "appended", treeCode }, 201);
+  } catch (err) {
+    console.error("POST /api/trees error:", err);
+    return c.json(
+      { ok: false, error: "ไม่สามารถบันทึกข้อมูลต้นไม้ได้", status: 500 },
+      500
+    );
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -109,14 +138,22 @@ treesRouter.delete("/:treeCode", async (c) => {
   const treeCode = c.req.param("treeCode");
   const db = createDb(c.env);
 
-  const result = await db
-    .delete(treesProfile)
-    .where(eq(treesProfile.treeCode, treeCode))
-    .returning({ id: treesProfile.id });
+  try {
+    const result = await db
+      .delete(treesProfile)
+      .where(eq(treesProfile.treeCode, treeCode))
+      .returning({ id: treesProfile.id });
 
-  if (result.length === 0) {
-    return c.json({ ok: false, error: "Tree not found", status: 404 }, 404);
+    if (result.length === 0) {
+      return c.json({ ok: false, error: "Tree not found", status: 404 }, 404);
+    }
+
+    return c.json({ ok: true });
+  } catch (err) {
+    console.error("DELETE /api/trees/:treeCode error:", err);
+    return c.json(
+      { ok: false, error: "ไม่สามารถลบข้อมูลต้นไม้ได้", status: 500 },
+      500
+    );
   }
-
-  return c.json({ ok: true });
 });

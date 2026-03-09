@@ -24,22 +24,35 @@ spacingLogsRouter.get("/", async (c) => {
   const db = createDb(c.env);
   const plotCode = c.req.query("plot_code");
 
-  const rows = plotCode
-    ? await db
-        .select()
-        .from(spacingLogs)
-        .where(eq(spacingLogs.plotCode, plotCode))
-        .orderBy(spacingLogs.timestamp)
-    : await db.select().from(spacingLogs).orderBy(spacingLogs.timestamp);
+  try {
+    const rows = plotCode
+      ? await db
+          .select()
+          .from(spacingLogs)
+          .where(eq(spacingLogs.plotCode, plotCode))
+          .orderBy(spacingLogs.timestamp)
+      : await db.select().from(spacingLogs).orderBy(spacingLogs.timestamp);
 
-  return c.json({ ok: true, data: rows });
+    return c.json({ ok: true, data: rows });
+  } catch (err) {
+    console.error("GET /api/spacing-logs error:", err);
+    return c.json(
+      { ok: false, error: "ไม่สามารถโหลดข้อมูลระยะห่างได้", status: 500 },
+      500
+    );
+  }
 });
 
 // ---------------------------------------------------------------------------
 // POST /api/spacing-logs  (mirrors addSpacingLog)
 // ---------------------------------------------------------------------------
 spacingLogsRouter.post("/", async (c) => {
-  const body = await c.req.json<Record<string, unknown>>();
+  let body: Record<string, unknown>;
+  try {
+    body = await c.req.json<Record<string, unknown>>();
+  } catch {
+    return c.json({ ok: false, error: "Invalid JSON body", status: 400 }, 400);
+  }
   const db = createDb(c.env);
 
   const spacingId = `SPC_${Date.now()}`;
@@ -55,8 +68,16 @@ spacingLogsRouter.post("/", async (c) => {
     timestamp: new Date(),
   };
 
-  await db.insert(spacingLogs).values(values);
-  return c.json({ ok: true, id: spacingId }, 201);
+  try {
+    await db.insert(spacingLogs).values(values);
+    return c.json({ ok: true, id: spacingId }, 201);
+  } catch (err) {
+    console.error("POST /api/spacing-logs error:", err);
+    return c.json(
+      { ok: false, error: "ไม่สามารถบันทึกข้อมูลระยะห่างได้", status: 500 },
+      500
+    );
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -66,14 +87,22 @@ spacingLogsRouter.delete("/:spacingId", async (c) => {
   const spacingId = c.req.param("spacingId");
   const db = createDb(c.env);
 
-  const result = await db
-    .delete(spacingLogs)
-    .where(eq(spacingLogs.spacingId, spacingId))
-    .returning({ id: spacingLogs.id });
+  try {
+    const result = await db
+      .delete(spacingLogs)
+      .where(eq(spacingLogs.spacingId, spacingId))
+      .returning({ id: spacingLogs.id });
 
-  if (result.length === 0) {
-    return c.json({ ok: false, error: "Spacing log not found", status: 404 }, 404);
+    if (result.length === 0) {
+      return c.json({ ok: false, error: "Spacing log not found", status: 404 }, 404);
+    }
+
+    return c.json({ ok: true });
+  } catch (err) {
+    console.error("DELETE /api/spacing-logs/:spacingId error:", err);
+    return c.json(
+      { ok: false, error: "ไม่สามารถลบข้อมูลระยะห่างได้", status: 500 },
+      500
+    );
   }
-
-  return c.json({ ok: true });
 });

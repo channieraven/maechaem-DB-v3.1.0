@@ -27,15 +27,23 @@ imagesRouter.get("/", async (c) => {
   const db = createDb(c.env);
   const plotCode = c.req.query("plot_code");
 
-  const rows = plotCode
-    ? await db
-        .select()
-        .from(plotImages)
-        .where(eq(plotImages.plotCode, plotCode))
-        .orderBy(plotImages.timestamp)
-    : await db.select().from(plotImages).orderBy(plotImages.timestamp);
+  try {
+    const rows = plotCode
+      ? await db
+          .select()
+          .from(plotImages)
+          .where(eq(plotImages.plotCode, plotCode))
+          .orderBy(plotImages.timestamp)
+      : await db.select().from(plotImages).orderBy(plotImages.timestamp);
 
-  return c.json({ ok: true, data: rows });
+    return c.json({ ok: true, data: rows });
+  } catch (err) {
+    console.error("GET /api/images error:", err);
+    return c.json(
+      { ok: false, error: "ไม่สามารถโหลดรูปภาพได้", status: 500 },
+      500
+    );
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -43,7 +51,12 @@ imagesRouter.get("/", async (c) => {
 // The URL may be a Cloudinary/CDN URL or a base64 data URI.
 // ---------------------------------------------------------------------------
 imagesRouter.post("/", async (c) => {
-  const body = await c.req.json<Record<string, unknown>>();
+  let body: Record<string, unknown>;
+  try {
+    body = await c.req.json<Record<string, unknown>>();
+  } catch {
+    return c.json({ ok: false, error: "Invalid JSON body", status: 400 }, 400);
+  }
   const db = createDb(c.env);
 
   const url = (body.url as string | undefined) ?? (body.image_base64 as string | undefined);
@@ -64,8 +77,16 @@ imagesRouter.post("/", async (c) => {
     timestamp: new Date(),
   };
 
-  await db.insert(plotImages).values(values);
-  return c.json({ ok: true, id: imageId, url }, 201);
+  try {
+    await db.insert(plotImages).values(values);
+    return c.json({ ok: true, id: imageId, url }, 201);
+  } catch (err) {
+    console.error("POST /api/images error:", err);
+    return c.json(
+      { ok: false, error: "ไม่สามารถบันทึกรูปภาพได้", status: 500 },
+      500
+    );
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -73,24 +94,37 @@ imagesRouter.post("/", async (c) => {
 // ---------------------------------------------------------------------------
 imagesRouter.put("/:imageId", async (c) => {
   const imageId = c.req.param("imageId");
-  const body = await c.req.json<{ description?: string }>();
+  let body: { description?: string };
+  try {
+    body = await c.req.json<{ description?: string }>();
+  } catch {
+    return c.json({ ok: false, error: "Invalid JSON body", status: 400 }, 400);
+  }
   const db = createDb(c.env);
 
-  const existing = await db
-    .select({ id: plotImages.id })
-    .from(plotImages)
-    .where(eq(plotImages.imageId, imageId));
+  try {
+    const existing = await db
+      .select({ id: plotImages.id })
+      .from(plotImages)
+      .where(eq(plotImages.imageId, imageId));
 
-  if (existing.length === 0) {
-    return c.json({ ok: false, error: "Image not found", status: 404 }, 404);
+    if (existing.length === 0) {
+      return c.json({ ok: false, error: "Image not found", status: 404 }, 404);
+    }
+
+    await db
+      .update(plotImages)
+      .set({ description: body.description ?? null })
+      .where(eq(plotImages.imageId, imageId));
+
+    return c.json({ ok: true });
+  } catch (err) {
+    console.error("PUT /api/images/:imageId error:", err);
+    return c.json(
+      { ok: false, error: "ไม่สามารถอัปเดตรูปภาพได้", status: 500 },
+      500
+    );
   }
-
-  await db
-    .update(plotImages)
-    .set({ description: body.description ?? null })
-    .where(eq(plotImages.imageId, imageId));
-
-  return c.json({ ok: true });
 });
 
 // ---------------------------------------------------------------------------
@@ -100,14 +134,22 @@ imagesRouter.delete("/:imageId", async (c) => {
   const imageId = c.req.param("imageId");
   const db = createDb(c.env);
 
-  const result = await db
-    .delete(plotImages)
-    .where(eq(plotImages.imageId, imageId))
-    .returning({ id: plotImages.id });
+  try {
+    const result = await db
+      .delete(plotImages)
+      .where(eq(plotImages.imageId, imageId))
+      .returning({ id: plotImages.id });
 
-  if (result.length === 0) {
-    return c.json({ ok: false, error: "Image not found", status: 404 }, 404);
+    if (result.length === 0) {
+      return c.json({ ok: false, error: "Image not found", status: 404 }, 404);
+    }
+
+    return c.json({ ok: true });
+  } catch (err) {
+    console.error("DELETE /api/images/:imageId error:", err);
+    return c.json(
+      { ok: false, error: "ไม่สามารถลบรูปภาพได้", status: 500 },
+      500
+    );
   }
-
-  return c.json({ ok: true });
 });
