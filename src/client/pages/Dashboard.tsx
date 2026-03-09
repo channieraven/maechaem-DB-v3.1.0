@@ -26,7 +26,10 @@ import type { FlyToTarget } from "../components/Map";
 // Geometry centre helper
 // ---------------------------------------------------------------------------
 
-function getGeometryCenter(geometry: GeoJsonGeometry): FlyToTarget | null {
+/** Returns the bounding box and centre of a plot geometry as a FlyToTarget.
+ * The `bounds` field drives map.fitBounds(); `longitude`/`latitude` are kept
+ * as a fallback centre in case bounds is absent. */
+function getGeometryBounds(geometry: GeoJsonGeometry): FlyToTarget | null {
   let coords: number[][] = [];
 
   if (geometry.type === "Polygon") {
@@ -37,12 +40,25 @@ function getGeometryCenter(geometry: GeoJsonGeometry): FlyToTarget | null {
     return null;
   }
 
-  const lngs = coords.map((c) => c[0] ?? 0);
-  const lats = coords.map((c) => c[1] ?? 0);
+  if (coords.length === 0) return null;
+
+  // Compute min/max in a single pass to avoid traversing the array four times.
+  let west = coords[0]?.[0] ?? 0;
+  let east = west;
+  let south = coords[0]?.[1] ?? 0;
+  let north = south;
+  for (const c of coords) {
+    const lng = c[0] ?? 0;
+    const lat = c[1] ?? 0;
+    if (lng < west) west = lng;
+    if (lng > east) east = lng;
+    if (lat < south) south = lat;
+    if (lat > north) north = lat;
+  }
   return {
-    longitude: (Math.min(...lngs) + Math.max(...lngs)) / 2,
-    latitude: (Math.min(...lats) + Math.max(...lats)) / 2,
-    zoom: 15,
+    longitude: (west + east) / 2,
+    latitude: (south + north) / 2,
+    bounds: [[west, south], [east, north]],
   };
 }
 
@@ -103,8 +119,8 @@ export function Dashboard() {
       setActiveIndex(index);
       setSelectedPlot(feature.properties);
       if (feature.geometry) {
-        const center = getGeometryCenter(feature.geometry);
-        if (center) setFlyToTarget({ ...center });
+        const target = getGeometryBounds(feature.geometry);
+        if (target) setFlyToTarget({ ...target });
       }
     },
     [plotsData]

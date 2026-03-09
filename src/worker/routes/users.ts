@@ -15,7 +15,7 @@
  *   PUT  /api/users/:userId      → update profile fields (self or admin)
  *   PUT  /api/users/:userId/role → update role + approved, sync to Clerk (admin only)
  */
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { createClerkClient } from "@clerk/backend";
 import { createDb } from "../../db/db";
@@ -30,7 +30,7 @@ export const usersRouter = new Hono<{ Bindings: Env }>();
 
 /** Resolve the Clerk public metadata role for the authenticated caller. */
 async function getCallerRole(
-  c: Parameters<Parameters<typeof usersRouter.use>[1]>[0]
+  c: Context<{ Bindings: Env }>
 ): Promise<string | undefined> {
   const clerk = createClerkClient({ secretKey: c.env.CLERK_SECRET_KEY });
   const userId = c.get("userId");

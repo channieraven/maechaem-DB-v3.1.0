@@ -59,6 +59,8 @@ export interface FlyToTarget {
   longitude: number;
   latitude: number;
   zoom?: number;
+  /** Bounding box [[west, south], [east, north]] — when set, fitBounds is used instead of flyTo */
+  bounds?: [[number, number], [number, number]];
 }
 
 interface MapProps {
@@ -205,15 +207,19 @@ export function Map({ plotsData, onPlotClick, flyToTarget, className = "" }: Map
     }
   }, [plotsData, isMapLoaded]);
 
-  // ----- Fly to target when sidebar plot is clicked (from v3.0.0) -----
+  // ----- Fly to / fit bounds when sidebar plot is clicked -----
   const handleFlyTo = useCallback((target: FlyToTarget) => {
     const map = mapRef.current;
     if (!map) return;
-    map.flyTo({
-      center: [target.longitude, target.latitude],
-      zoom: target.zoom ?? 15,
-      duration: 1500,
-    });
+    if (target.bounds) {
+      map.fitBounds(target.bounds, { padding: 60, duration: 1000 });
+    } else {
+      map.flyTo({
+        center: [target.longitude, target.latitude],
+        zoom: target.zoom ?? 15,
+        duration: 1500,
+      });
+    }
   }, []);
 
   useEffect(() => {
