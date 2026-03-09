@@ -1,20 +1,19 @@
 /**
  * Dashboard.tsx — Main GIS dashboard page.
  *
- * Migrated from v3.0.0:
- *  - Two-panel layout: persistent left sidebar (plot list) + map
- *  - Sidebar click triggers flyTo animation on the map
- *  - Active plot tracking and highlight state
- *  - Thai language header labels
+ * Layout: header | sidebar (plot list) | map | plot-detail panel
  *
- * Retained from v3.1.0:
- *  - Fetches plot GeoJSON from the Hono API on mount
- *  - Loading overlay and error banner
+ * New in v3.1.0 UX update:
+ *  - PlotPanel slides in when a plot is selected (tabs: info, growth logs,
+ *    trees, images, spacing logs)
+ *  - NotificationBell in header (polls /api/notifications for the signed-in user)
  */
 import { useState, useEffect, useCallback } from "react";
-import { UserButton } from "@clerk/react";
+import { useUser, UserButton } from "@clerk/react";
 import { Map } from "../components/Map";
 import { Sidebar } from "../components/Sidebar";
+import { PlotPanel } from "../components/PlotPanel";
+import { NotificationBell } from "../components/NotificationBell";
 import type {
   GeoJsonFeatureCollection,
   PlotProperties,
@@ -24,7 +23,7 @@ import type {
 import type { FlyToTarget } from "../components/Map";
 
 // ---------------------------------------------------------------------------
-// Geometry centre helper (migrated from v3.0.0 DashboardClient)
+// Geometry centre helper
 // ---------------------------------------------------------------------------
 
 function getGeometryCenter(geometry: GeoJsonGeometry): FlyToTarget | null {
@@ -52,10 +51,12 @@ function getGeometryCenter(geometry: GeoJsonGeometry): FlyToTarget | null {
 // ---------------------------------------------------------------------------
 
 export function Dashboard() {
+  const { user } = useUser();
   const [plotsData, setPlotsData] =
     useState<GeoJsonFeatureCollection<PlotProperties> | null>(null);
   const [flyToTarget, setFlyToTarget] = useState<FlyToTarget | null>(null);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const [selectedPlot, setSelectedPlot] = useState<PlotProperties | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -94,30 +95,40 @@ export function Dashboard() {
     };
   }, []);
 
-  // ----- Sidebar plot click → compute centre → flyTo -----
-  const handleSidebarPlotClick = useCallback(
+  // ----- Select a plot: fly to it, highlight sidebar, open detail panel -----
+  const selectPlot = useCallback(
     (index: number) => {
       const feature = plotsData?.features[index];
-      if (!feature?.geometry) return;
-      const center = getGeometryCenter(feature.geometry);
-      if (!center) return;
+      if (!feature) return;
       setActiveIndex(index);
-      setFlyToTarget({ ...center });
+      setSelectedPlot(feature.properties);
+      if (feature.geometry) {
+        const center = getGeometryCenter(feature.geometry);
+        if (center) setFlyToTarget({ ...center });
+      }
     },
     [plotsData]
   );
 
-  // ----- Map plot click → set active index -----
+  // ----- Sidebar plot click -----
+  const handleSidebarPlotClick = useCallback(
+    (index: number) => selectPlot(index),
+    [selectPlot]
+  );
+
+  // ----- Map plot click → find feature index → open panel -----
   const handleMapPlotClick = useCallback(
     (_id: number, properties: PlotProperties) => {
       if (!plotsData) return;
       const index = plotsData.features.findIndex(
         (f) => f.properties.plotCode === properties.plotCode
       );
-      if (index !== -1) setActiveIndex(index);
+      if (index !== -1) selectPlot(index);
     },
-    [plotsData]
+    [plotsData, selectPlot]
   );
+
+  const userEmail = user?.primaryEmailAddress?.emailAddress ?? "";
 
   return (
     <div className="flex flex-col h-screen bg-white text-gray-900">
@@ -137,19 +148,22 @@ export function Dashboard() {
           </span>
         </div>
 
-        <div className="ml-auto flex items-center gap-4 text-sm text-gray-400">
+        <div className="ml-auto flex items-center gap-3 text-sm text-gray-400">
           {loading ? (
             <span className="animate-pulse text-gray-400">กำลังโหลดข้อมูล…</span>
           ) : error ? (
-            <span className="text-red-500">{error}</span>
+            <span className="text-red-500 text-xs">{error}</span>
           ) : (
-            <span className="text-gray-500">{plotsData?.features.length ?? 0} แปลง</span>
+            <span className="text-gray-500 text-xs">
+              {plotsData?.features.length ?? 0} แปลง
+            </span>
           )}
+          {userEmail && <NotificationBell userEmail={userEmail} />}
           <UserButton />
         </div>
       </header>
 
-      {/* ── Main content: sidebar + map ── */}
+      {/* ── Main content ── */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left sidebar — all-plots list */}
         <Sidebar
@@ -184,6 +198,18 @@ export function Dashboard() {
             className="w-full h-full"
           />
         </main>
+
+        {/* Right detail panel — shown when a plot is selected */}
+        {selectedPlot && (
+          <PlotPanel
+            plotCode={selectedPlot.plotCode}
+            properties={selectedPlot}
+            onClose={() => {
+              setSelectedPlot(null);
+              setActiveIndex(null);
+            }}
+          />
+        )}
       </div>
     </div>
   );
