@@ -1,9 +1,9 @@
 /**
- * Sidebar.tsx — All-plots list sidebar (migrated from v3.0.0 DashboardClient).
+ * Sidebar.tsx — All-plots list sidebar.
  *
- * Displays a scrollable list of all plots. Clicking a plot fires onPlotClick,
- * which triggers a flyTo animation on the map. The active plot is highlighted.
- * Labels are in Thai to match v3.0.0.
+ * Scrollable list of all plots. Clicking a plot fires onPlotClick,
+ * which triggers a flyTo animation and opens the PlotPanel.
+ * Labels are in Thai.
  */
 import type { GeoJsonFeatureCollection, PlotProperties } from "../../shared/types";
 
@@ -41,22 +41,34 @@ export function Sidebar({ plots, activeIndex, onPlotClick }: SidebarProps) {
                       : "bg-white hover:bg-green-50 border border-gray-100"
                   }`}
                 >
-                  <p
-                    className={`font-medium truncate ${
-                      isActive ? "text-green-700" : "text-gray-800"
-                    }`}
-                  >
-                    {p.farmerName ?? p.plotCode ?? `แปลง ${index + 1}`}
-                  </p>
-                  {p.plotCode != null && (
-                    <p className="text-gray-400 text-xs mt-0.5">รหัส: {p.plotCode}</p>
-                  )}
-                  {p.areaRai != null && (
-                    <p className="text-gray-400 text-xs">{p.areaRai} ไร่</p>
-                  )}
-                  {p.elevMean != null && (
-                    <p className="text-gray-400 text-xs">{p.elevMean} ม.</p>
-                  )}
+                  <div className="flex items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p
+                        className={`font-medium truncate text-sm ${
+                          isActive ? "text-green-700" : "text-gray-800"
+                        }`}
+                      >
+                        {p.farmerName ?? p.plotCode ?? `แปลง ${index + 1}`}
+                      </p>
+                      {p.plotCode != null && (
+                        <p className="text-gray-400 text-xs mt-0.5">รหัส: {p.plotCode}</p>
+                      )}
+                      <div className="flex flex-wrap gap-x-2 mt-1">
+                        {p.areaRai != null && (
+                          <span className="text-gray-400 text-xs">{p.areaRai} ไร่</span>
+                        )}
+                        {p.tambon != null && (
+                          <span className="text-gray-400 text-xs truncate">{p.tambon}</span>
+                        )}
+                        {p.elevMean != null && (
+                          <span className="text-gray-400 text-xs">{p.elevMean} ม.</span>
+                        )}
+                      </div>
+                    </div>
+                    {isActive && (
+                      <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-green-500 mt-1.5" />
+                    )}
+                  </div>
                 </button>
               </li>
             );
