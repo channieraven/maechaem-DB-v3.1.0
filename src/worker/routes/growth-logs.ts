@@ -28,32 +28,40 @@ growthLogsRouter.get("/", async (c) => {
   const plotCode = c.req.query("plot_code");
   const targetSheet = c.req.query("target_sheet");
 
-  let rows;
-  if (plotCode && targetSheet) {
-    rows = await db
-      .select()
-      .from(growthLogs)
-      .where(
-        sql`${growthLogs.plotCode} = ${plotCode} AND ${growthLogs.targetSheet} = ${targetSheet}`
-      )
-      .orderBy(growthLogs.timestamp);
-  } else if (plotCode) {
-    rows = await db
-      .select()
-      .from(growthLogs)
-      .where(eq(growthLogs.plotCode, plotCode))
-      .orderBy(growthLogs.timestamp);
-  } else if (targetSheet) {
-    rows = await db
-      .select()
-      .from(growthLogs)
-      .where(eq(growthLogs.targetSheet, targetSheet))
-      .orderBy(growthLogs.timestamp);
-  } else {
-    rows = await db.select().from(growthLogs).orderBy(growthLogs.timestamp);
-  }
+  try {
+    let rows;
+    if (plotCode && targetSheet) {
+      rows = await db
+        .select()
+        .from(growthLogs)
+        .where(
+          sql`${growthLogs.plotCode} = ${plotCode} AND ${growthLogs.targetSheet} = ${targetSheet}`
+        )
+        .orderBy(growthLogs.timestamp);
+    } else if (plotCode) {
+      rows = await db
+        .select()
+        .from(growthLogs)
+        .where(eq(growthLogs.plotCode, plotCode))
+        .orderBy(growthLogs.timestamp);
+    } else if (targetSheet) {
+      rows = await db
+        .select()
+        .from(growthLogs)
+        .where(eq(growthLogs.targetSheet, targetSheet))
+        .orderBy(growthLogs.timestamp);
+    } else {
+      rows = await db.select().from(growthLogs).orderBy(growthLogs.timestamp);
+    }
 
-  return c.json({ ok: true, data: rows });
+    return c.json({ ok: true, data: rows });
+  } catch (err) {
+    console.error("GET /api/growth-logs error:", err);
+    return c.json(
+      { ok: false, error: "ไม่สามารถโหลดบันทึกการเจริญเติบโตได้", status: 500 },
+      500
+    );
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -162,16 +170,24 @@ growthLogsRouter.get("/:logId", async (c) => {
   const logId = c.req.param("logId");
   const db = createDb(c.env);
 
-  const rows = await db
-    .select()
-    .from(growthLogs)
-    .where(eq(growthLogs.logId, logId));
+  try {
+    const rows = await db
+      .select()
+      .from(growthLogs)
+      .where(eq(growthLogs.logId, logId));
 
-  if (!rows[0]) {
-    return c.json({ ok: false, error: "Growth log not found", status: 404 }, 404);
+    if (!rows[0]) {
+      return c.json({ ok: false, error: "Growth log not found", status: 404 }, 404);
+    }
+
+    return c.json({ ok: true, data: rows[0] });
+  } catch (err) {
+    console.error("GET /api/growth-logs/:logId error:", err);
+    return c.json(
+      { ok: false, error: "ไม่สามารถโหลดบันทึกการเจริญเติบโตได้", status: 500 },
+      500
+    );
   }
-
-  return c.json({ ok: true, data: rows[0] });
 });
 
 // ---------------------------------------------------------------------------
@@ -180,7 +196,12 @@ growthLogsRouter.get("/:logId", async (c) => {
 // otherwise → insert with a generated log_id.
 // ---------------------------------------------------------------------------
 growthLogsRouter.post("/", async (c) => {
-  const body = await c.req.json<Record<string, unknown>>();
+  let body: Record<string, unknown>;
+  try {
+    body = await c.req.json<Record<string, unknown>>();
+  } catch {
+    return c.json({ ok: false, error: "Invalid JSON body", status: 400 }, 400);
+  }
   const db = createDb(c.env);
 
   const logId = (body.log_id as string | undefined) ?? `LOG_${Date.now()}`;
@@ -218,22 +239,30 @@ growthLogsRouter.post("/", async (c) => {
     timestamp: new Date(),
   };
 
-  // Check if a record with this log_id already exists
-  const existing = await db
-    .select({ id: growthLogs.id })
-    .from(growthLogs)
-    .where(eq(growthLogs.logId, logId));
-
-  if (existing.length > 0) {
-    await db
-      .update(growthLogs)
-      .set(values)
+  try {
+    // Check if a record with this log_id already exists
+    const existing = await db
+      .select({ id: growthLogs.id })
+      .from(growthLogs)
       .where(eq(growthLogs.logId, logId));
-    return c.json({ ok: true, action: "updated", logId });
-  }
 
-  await db.insert(growthLogs).values(values);
-  return c.json({ ok: true, action: "appended", logId }, 201);
+    if (existing.length > 0) {
+      await db
+        .update(growthLogs)
+        .set(values)
+        .where(eq(growthLogs.logId, logId));
+      return c.json({ ok: true, action: "updated", logId });
+    }
+
+    await db.insert(growthLogs).values(values);
+    return c.json({ ok: true, action: "appended", logId }, 201);
+  } catch (err) {
+    console.error("POST /api/growth-logs error:", err);
+    return c.json(
+      { ok: false, error: "ไม่สามารถบันทึกข้อมูลการเจริญเติบโตได้", status: 500 },
+      500
+    );
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -245,49 +274,57 @@ growthLogsRouter.put("/:logId", async (c) => {
   const editorEmail = (c.get("userEmail") as string | undefined) ?? "unknown";
   const db = createDb(c.env);
 
-  const existing = await db
-    .select({ id: growthLogs.id })
-    .from(growthLogs)
-    .where(eq(growthLogs.logId, logId));
-
-  if (existing.length === 0) {
-    return c.json({ ok: false, error: "Growth log not found", status: 404 }, 404);
-  }
-
-  let body: Record<string, unknown>;
   try {
-    body = await c.req.json<Record<string, unknown>>();
-  } catch {
-    return c.json({ ok: false, error: "Invalid JSON body", status: 400 }, 400);
+    const existing = await db
+      .select({ id: growthLogs.id })
+      .from(growthLogs)
+      .where(eq(growthLogs.logId, logId));
+
+    if (existing.length === 0) {
+      return c.json({ ok: false, error: "Growth log not found", status: 404 }, 404);
+    }
+
+    let body: Record<string, unknown>;
+    try {
+      body = await c.req.json<Record<string, unknown>>();
+    } catch {
+      return c.json({ ok: false, error: "Invalid JSON body", status: 400 }, 400);
+    }
+
+    const patch: Partial<typeof growthLogs.$inferInsert> = {
+      timestamp: new Date(),
+      lastEditedBy: editorEmail,
+    };
+
+    if (body.height_m !== undefined)
+      patch.heightM = body.height_m != null ? Number(body.height_m) : null;
+    if (body.dbh_cm !== undefined)
+      patch.dbhCm = body.dbh_cm != null ? Number(body.dbh_cm) : null;
+    if (body.bamboo_culms !== undefined)
+      patch.bambooCulms = body.bamboo_culms != null ? Number(body.bamboo_culms) : null;
+    if (body.dbh_1_cm !== undefined)
+      patch.dbh1Cm = body.dbh_1_cm != null ? Number(body.dbh_1_cm) : null;
+    if (body.flowering !== undefined)
+      patch.flowering = (body.flowering as string | null) ?? null;
+    if (body.note !== undefined)
+      patch.note = (body.note as string | null) ?? null;
+    if (body.status !== undefined)
+      patch.status = (body.status as string | null) ?? null;
+    if (body.survey_date !== undefined)
+      patch.surveyDate = (body.survey_date as string | null) ?? null;
+    if (body.recorder !== undefined)
+      patch.recorder = (body.recorder as string | null) ?? null;
+
+    await db.update(growthLogs).set(patch).where(eq(growthLogs.logId, logId));
+
+    return c.json({ ok: true, action: "updated", logId, lastEditedBy: editorEmail });
+  } catch (err) {
+    console.error("PUT /api/growth-logs/:logId error:", err);
+    return c.json(
+      { ok: false, error: "ไม่สามารถแก้ไขบันทึกการเจริญเติบโตได้", status: 500 },
+      500
+    );
   }
-
-  const patch: Partial<typeof growthLogs.$inferInsert> = {
-    timestamp: new Date(),
-    lastEditedBy: editorEmail,
-  };
-
-  if (body.height_m !== undefined)
-    patch.heightM = body.height_m != null ? Number(body.height_m) : null;
-  if (body.dbh_cm !== undefined)
-    patch.dbhCm = body.dbh_cm != null ? Number(body.dbh_cm) : null;
-  if (body.bamboo_culms !== undefined)
-    patch.bambooCulms = body.bamboo_culms != null ? Number(body.bamboo_culms) : null;
-  if (body.dbh_1_cm !== undefined)
-    patch.dbh1Cm = body.dbh_1_cm != null ? Number(body.dbh_1_cm) : null;
-  if (body.flowering !== undefined)
-    patch.flowering = (body.flowering as string | null) ?? null;
-  if (body.note !== undefined)
-    patch.note = (body.note as string | null) ?? null;
-  if (body.status !== undefined)
-    patch.status = (body.status as string | null) ?? null;
-  if (body.survey_date !== undefined)
-    patch.surveyDate = (body.survey_date as string | null) ?? null;
-  if (body.recorder !== undefined)
-    patch.recorder = (body.recorder as string | null) ?? null;
-
-  await db.update(growthLogs).set(patch).where(eq(growthLogs.logId, logId));
-
-  return c.json({ ok: true, action: "updated", logId, lastEditedBy: editorEmail });
 });
 
 // ---------------------------------------------------------------------------
@@ -297,16 +334,24 @@ growthLogsRouter.delete("/:logId", async (c) => {
   const logId = c.req.param("logId");
   const db = createDb(c.env);
 
-  const result = await db
-    .delete(growthLogs)
-    .where(eq(growthLogs.logId, logId))
-    .returning({ id: growthLogs.id });
+  try {
+    const result = await db
+      .delete(growthLogs)
+      .where(eq(growthLogs.logId, logId))
+      .returning({ id: growthLogs.id });
 
-  if (result.length === 0) {
-    return c.json({ ok: false, error: "Growth log not found", status: 404 }, 404);
+    if (result.length === 0) {
+      return c.json({ ok: false, error: "Growth log not found", status: 404 }, 404);
+    }
+
+    return c.json({ ok: true });
+  } catch (err) {
+    console.error("DELETE /api/growth-logs/:logId error:", err);
+    return c.json(
+      { ok: false, error: "ไม่สามารถลบบันทึกการเจริญเติบโตได้", status: 500 },
+      500
+    );
   }
-
-  return c.json({ ok: true });
 });
 
 // ---------------------------------------------------------------------------

@@ -28,33 +28,46 @@ commentsRouter.get("/", async (c) => {
     return c.json({ ok: false, error: "log_id query parameter is required", status: 400 }, 400);
   }
 
-  const db = createDb(c.env);
-  const rows = await db
-    .select()
-    .from(comments)
-    .where(eq(comments.logId, logId))
-    .orderBy(comments.createdAt);
+  try {
+    const db = createDb(c.env);
+    const rows = await db
+      .select()
+      .from(comments)
+      .where(eq(comments.logId, logId))
+      .orderBy(comments.createdAt);
 
-  // Parse mentions JSON string back to an array for each row
-  const data = rows.map((r) => ({
-    ...r,
-    mentions: (() => {
-      try {
-        return JSON.parse(r.mentions ?? "[]");
-      } catch {
-        return [];
-      }
-    })(),
-  }));
+    // Parse mentions JSON string back to an array for each row
+    const data = rows.map((r) => ({
+      ...r,
+      mentions: (() => {
+        try {
+          return JSON.parse(r.mentions ?? "[]");
+        } catch {
+          return [];
+        }
+      })(),
+    }));
 
-  return c.json({ ok: true, data });
+    return c.json({ ok: true, data });
+  } catch (err) {
+    console.error("GET /api/comments error:", err);
+    return c.json(
+      { ok: false, error: "ไม่สามารถโหลดความคิดเห็นได้", status: 500 },
+      500
+    );
+  }
 });
 
 // ---------------------------------------------------------------------------
 // POST /api/comments  (mirrors addComment + createNotification)
 // ---------------------------------------------------------------------------
 commentsRouter.post("/", async (c) => {
-  const body = await c.req.json<Record<string, unknown>>();
+  let body: Record<string, unknown>;
+  try {
+    body = await c.req.json<Record<string, unknown>>();
+  } catch {
+    return c.json({ ok: false, error: "Invalid JSON body", status: 400 }, 400);
+  }
   const db = createDb(c.env);
 
   const commentId = `CMT_${Date.now()}`;
@@ -62,57 +75,65 @@ commentsRouter.post("/", async (c) => {
     ? (body.mentions as string[])
     : [];
 
-  await db.insert(comments).values({
-    commentId,
-    logId: (body.log_id as string | null) ?? null,
-    treeCode: (body.tree_code as string | null) ?? null,
-    plotCode: (body.plot_code as string | null) ?? null,
-    content: (body.content as string) ?? "",
-    authorEmail: (body.author_email as string | null) ?? null,
-    authorName: (body.author_name as string | null) ?? null,
-    mentions: JSON.stringify(mentionsArr),
-    createdAt: new Date(),
-  });
-
-  // Build notification recipients: mentioned users + recorder (if different from author)
-  const notifyEmails = new Set<string>(mentionsArr);
-  const recorderEmail = body.recorder_email as string | undefined;
-  const authorEmail = body.author_email as string | undefined;
-  if (recorderEmail && recorderEmail !== authorEmail) {
-    notifyEmails.add(recorderEmail);
-  }
-
-  const authorName = (body.author_name as string) ?? "";
-  const treeCode = (body.tree_code as string) ?? "";
-  const content = (body.content as string) ?? "";
-  const logId = (body.log_id as string) ?? "";
-  const plotCode = (body.plot_code as string) ?? "";
-
-  const message =
-    authorName +
-    " แสดงความคิดเห็นเกี่ยวกับ " +
-    treeCode +
-    ": " +
-    content.substring(0, 60) +
-    (content.length > 60 ? "..." : "");
-
-  if (notifyEmails.size > 0) {
-    const notifRows = [...notifyEmails].map((email) => ({
-      notificationId: `NTF_${Date.now()}_${email}`,
-      userEmail: email,
+  try {
+    await db.insert(comments).values({
       commentId,
-      logId: logId || null,
-      treeCode: treeCode || null,
-      plotCode: plotCode || null,
-      message,
-      authorName,
+      logId: (body.log_id as string | null) ?? null,
+      treeCode: (body.tree_code as string | null) ?? null,
+      plotCode: (body.plot_code as string | null) ?? null,
+      content: (body.content as string) ?? "",
+      authorEmail: (body.author_email as string | null) ?? null,
+      authorName: (body.author_name as string | null) ?? null,
+      mentions: JSON.stringify(mentionsArr),
       createdAt: new Date(),
-      isRead: false,
-    }));
-    await db.insert(notifications).values(notifRows);
-  }
+    });
 
-  return c.json({ ok: true, id: commentId }, 201);
+    // Build notification recipients: mentioned users + recorder (if different from author)
+    const notifyEmails = new Set<string>(mentionsArr);
+    const recorderEmail = body.recorder_email as string | undefined;
+    const authorEmail = body.author_email as string | undefined;
+    if (recorderEmail && recorderEmail !== authorEmail) {
+      notifyEmails.add(recorderEmail);
+    }
+
+    const authorName = (body.author_name as string) ?? "";
+    const treeCode = (body.tree_code as string) ?? "";
+    const content = (body.content as string) ?? "";
+    const logId = (body.log_id as string) ?? "";
+    const plotCode = (body.plot_code as string) ?? "";
+
+    const message =
+      authorName +
+      " แสดงความคิดเห็นเกี่ยวกับ " +
+      treeCode +
+      ": " +
+      content.substring(0, 60) +
+      (content.length > 60 ? "..." : "");
+
+    if (notifyEmails.size > 0) {
+      const notifRows = [...notifyEmails].map((email) => ({
+        notificationId: `NTF_${Date.now()}_${email}`,
+        userEmail: email,
+        commentId,
+        logId: logId || null,
+        treeCode: treeCode || null,
+        plotCode: plotCode || null,
+        message,
+        authorName,
+        createdAt: new Date(),
+        isRead: false,
+      }));
+      await db.insert(notifications).values(notifRows);
+    }
+
+    return c.json({ ok: true, id: commentId }, 201);
+  } catch (err) {
+    console.error("POST /api/comments error:", err);
+    return c.json(
+      { ok: false, error: "ไม่สามารถบันทึกความคิดเห็นได้", status: 500 },
+      500
+    );
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -122,14 +143,22 @@ commentsRouter.delete("/:commentId", async (c) => {
   const commentId = c.req.param("commentId");
   const db = createDb(c.env);
 
-  const result = await db
-    .delete(comments)
-    .where(eq(comments.commentId, commentId))
-    .returning({ id: comments.id });
+  try {
+    const result = await db
+      .delete(comments)
+      .where(eq(comments.commentId, commentId))
+      .returning({ id: comments.id });
 
-  if (result.length === 0) {
-    return c.json({ ok: false, error: "Comment not found", status: 404 }, 404);
+    if (result.length === 0) {
+      return c.json({ ok: false, error: "Comment not found", status: 404 }, 404);
+    }
+
+    return c.json({ ok: true });
+  } catch (err) {
+    console.error("DELETE /api/comments/:commentId error:", err);
+    return c.json(
+      { ok: false, error: "ไม่สามารถลบความคิดเห็นได้", status: 500 },
+      500
+    );
   }
-
-  return c.json({ ok: true });
 });
