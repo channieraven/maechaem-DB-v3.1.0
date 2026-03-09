@@ -452,6 +452,11 @@ export function ImportDialog({ onClose }: ImportDialogProps) {
                   <p className="text-xs text-gray-500">ข้าม</p>
                 </div>
               </div>
+              {result.importedBy && (
+                <p className="text-xs text-green-700 mt-1">
+                  📝 บันทึกโดย: <span className="font-medium">{result.importedBy}</span>
+                </p>
+              )}
               {result.errors.length > 0 && (
                 <div className="mt-2 space-y-0.5">
                   <p className="text-xs font-medium text-amber-700">⚠ ข้อผิดพลาดบางแถว:</p>
