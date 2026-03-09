@@ -14,21 +14,10 @@
     "not_found_handling": "single-page-application"
   },
 
-  "routes": [
-    { "pattern": "tiles.maechaem-db-rfd.work/*", "zone_name": "maechaem-db-rfd.work" }
-  ],
-
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
       "id": "50ebedaa730f4cb890a07b7132beb18c"
-    }
-  ],
-
-  "r2_buckets": [
-    {
-      "binding": "R2_BUCKET",
-      "bucket_name": "maechaem-db-drone"
     }
   ],
 
