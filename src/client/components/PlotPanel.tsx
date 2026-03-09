@@ -285,6 +285,13 @@ function GrowthTab({ logs }: { logs: GrowthLog[] }) {
               {log.status && <LogRow label="สถานะ" value={log.status} />}
               {log.flowering && <LogRow label="การออกดอก" value={log.flowering} />}
               {log.recorder && <LogRow label="ผู้บันทึก" value={log.recorder} />}
+              {log.lastEditedBy && log.lastEditedBy !== log.recorder && (
+                <LogRow
+                  label="แก้ไขล่าสุดโดย"
+                  value={`${log.lastEditedBy} · ${formatTimestamp(log.timestamp)}`}
+                  highlight
+                />
+              )}
               {log.note && <LogRow label="หมายเหตุ" value={log.note} />}
             </div>
           )}
@@ -294,13 +301,29 @@ function GrowthTab({ logs }: { logs: GrowthLog[] }) {
   );
 }
 
-function LogRow({ label, value }: { label: string; value: string }) {
+function LogRow({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
     <div className="flex gap-2">
       <span className="text-gray-400 text-xs w-28 flex-shrink-0">{label}</span>
-      <span className="text-gray-700 text-xs">{value}</span>
+      <span className={`text-xs ${highlight ? "text-amber-600 font-medium" : "text-gray-700"}`}>
+        {value}
+      </span>
     </div>
   );
+}
+
+function formatTimestamp(ts: string): string {
+  try {
+    return new Date(ts).toLocaleString("th-TH", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return ts;
+  }
 }
 
 // ---------------------------------------------------------------------------

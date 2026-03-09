@@ -152,7 +152,7 @@ growthLogsRouter.post("/import", async (c) => {
     }
   }
 
-  return c.json({ ok: true, data: { inserted, updated, skipped: 0, errors } });
+  return c.json({ ok: true, data: { inserted, updated, skipped: 0, errors, importedBy: editorEmail } });
 });
 
 // ---------------------------------------------------------------------------

@@ -241,6 +241,8 @@ export interface ImportResult {
   updated: number;
   skipped: number;
   errors: string[];
+  /** Email of the user who performed the bulk import (for audit tracking). */
+  importedBy?: string;
 }
 
 // ---------------------------------------------------------------------------
