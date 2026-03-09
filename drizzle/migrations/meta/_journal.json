@@ -1,12 +1,12 @@
 {
   "version": "7",
-  "dialect": "sqlite",
+  "dialect": "postgresql",
   "entries": [
     {
       "idx": 0,
       "version": "7",
       "when": 1741499360860,
-      "tag": "0000_d1_schema",
+      "tag": "0000_neon_postgis_schema",
       "breakpoints": true
     }
   ]

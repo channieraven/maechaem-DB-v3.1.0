@@ -15,14 +15,14 @@
     "deploy": "npm run build && wrangler deploy",
     "cf:dev": "wrangler dev",
     "db:generate": "drizzle-kit generate",
-    "db:d1:apply": "wrangler d1 migrations apply maechaem-db --local",
-    "db:d1:apply:prod": "wrangler d1 migrations apply maechaem-db",
+    "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "@clerk/backend": "^1.26.0",
     "@clerk/react": "^6.0.1",
+    "@neondatabase/serverless": "^1.0.2",
     "drizzle-orm": "^0.44.0",
     "hono": "^4.7.4",
     "maplibre-gl": "^5.3.0",

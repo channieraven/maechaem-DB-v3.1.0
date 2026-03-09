@@ -4,11 +4,15 @@
 # Wrangler reads this file during `wrangler dev` to simulate secrets
 # that would be set via `wrangler secret put` in production.
 # NEVER commit this file — it is listed in .gitignore.
-# Copy .env.example and adapt for Wrangler's format (KEY=VALUE, no export).
+# Copy .dev.vars.example to .dev.vars and fill in your values.
 #
-# D1 database bindings are configured in wrangler.json and do NOT need to be
-# listed here — Wrangler automatically creates a local SQLite file for D1
-# when running `wrangler dev`.
+# DATABASE_URL is used in all contexts:
+#   - Local dev (`wrangler dev`)    : read from this file
+#   - Production (Cloudflare Worker): set via `wrangler secret put DATABASE_URL`
+#   - Migrations (`npm run db:push`): read from .env (Drizzle Kit)
+#
+# Use the same direct Neon connection string everywhere.
 
 CLERK_PUBLISHABLE_KEY=pk_test_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 CLERK_SECRET_KEY=sk_test_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+DATABASE_URL=postgresql://<user>:<password>@<host>.neon.tech/<dbname>?sslmode=require
