@@ -8,7 +8,7 @@
  *  - plots              : GeoJSON plot boundaries (carried over from v3.0.0)
  *  - species_observations: field species counts per plot
  *  - carbon_estimates   : above-ground biomass / carbon stock estimates
- *  - profiles           : user profiles synced from Clerk (extended with role/approval)
+ *  - profiles           : user profiles synced from Clerk (v2.1.0 migration)
  *  - trees_profile      : individual tree coordinates & taxonomy (was trees_profile sheet)
  *  - growth_logs        : periodic tree growth measurements (was growth_logs sheet)
  *  - plot_images        : images attached to plots (was plot_images sheet)
@@ -97,21 +97,40 @@ export const carbonEstimates = pgTable("carbon_estimates", {
 });
 
 // ---------------------------------------------------------------------------
-// profiles  (extended from the Clerk webhook seed created in webhooks.ts)
+// profiles
+// Migrated from v2.1.0 Firebase Cloud Functions (createUserProfile logic).
+// Mirrors the Firestore `profiles` collection document structure, adapted
+// for PostgreSQL.  Role/approval state is the source of truth; it is synced
+// to Clerk public metadata so the JWT carries the latest values.
 // ---------------------------------------------------------------------------
 
 export const profiles = pgTable("profiles", {
   id: serial("id").primaryKey(),
-  /** Clerk user ID (e.g. "user_2abc…") */
+  /** Clerk user ID — matches `sub` claim in the Clerk JWT. */
   userId: text("user_id").notNull().unique(),
+  /** Primary email address sourced from Clerk on user.created. */
   email: text("email").notNull(),
-  fullname: varchar("fullname", { length: 200 }),
-  position: varchar("position", { length: 200 }),
-  organization: varchar("organization", { length: 200 }),
-  /** Role: "admin" | "researcher" | "pending" */
+  /** Display name (from Clerk firstName+lastName or email prefix). */
+  fullname: text("fullname"),
+  /**
+   * Access role — mirrors v2.1.0 Firestore field.
+   *  "admin"   → full access, can manage users
+   *  "pending" → awaiting admin approval
+   */
   role: varchar("role", { length: 50 }).notNull().default("pending"),
+  /**
+   * Whether the user has been approved by an admin.
+   * First registered user is automatically approved as bootstrap admin.
+   */
   approved: boolean("approved").notNull().default(false),
+  /** Optional: job title / position */
+  position: text("position"),
+  /** Optional: employer / organisation */
+  organization: text("organization"),
+  /** Optional: contact phone number */
+  phone: text("phone"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 // ---------------------------------------------------------------------------

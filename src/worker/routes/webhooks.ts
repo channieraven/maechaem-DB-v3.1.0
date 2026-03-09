@@ -1,26 +1,39 @@
 /**
- * webhooks.ts — Clerk webhook handler (migrated from v3.0.0).
+ * webhooks.ts — Clerk webhook handler.
  *
  * Listens for Clerk events and syncs data to the database.
+ * Migrated from v2.1.0 Firebase Cloud Function `createUserProfile`.
  *
  * Required environment variables:
  *   CLERK_WEBHOOK_SECRET — signing secret from the Clerk Dashboard
  *                          (Webhooks → your endpoint → Signing Secret)
+ *   CLERK_SECRET_KEY     — Clerk backend secret for updating user metadata
  *
  * Supported events:
- *   user.created — inserts user_id + primary email into the `profiles` table.
+ *   user.created — inserts a profile row and applies bootstrap-admin logic:
+ *     • First user ever → role="admin", approved=true
+ *     • All subsequent  → role="pending", approved=false
+ *     Clerk public metadata is updated so the JWT carries current role/approved.
  *
  * Prerequisites — run this SQL once against your database:
  *   CREATE TABLE IF NOT EXISTS profiles (
- *     id         SERIAL PRIMARY KEY,
- *     user_id    TEXT NOT NULL UNIQUE,
- *     email      TEXT NOT NULL,
- *     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+ *     id           SERIAL PRIMARY KEY,
+ *     user_id      TEXT NOT NULL UNIQUE,
+ *     email        TEXT NOT NULL,
+ *     fullname     TEXT,
+ *     role         VARCHAR(50) NOT NULL DEFAULT 'pending',
+ *     approved     BOOLEAN     NOT NULL DEFAULT FALSE,
+ *     position     TEXT,
+ *     organization TEXT,
+ *     phone        TEXT,
+ *     created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+ *     updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
  *   );
  */
 import { Hono } from "hono";
 import { Webhook } from "svix";
 import { sql } from "drizzle-orm";
+import { createClerkClient } from "@clerk/backend";
 import { createDb } from "../../db/db";
 import type { Env } from "../../db/db";
 
@@ -37,6 +50,8 @@ interface EmailAddress {
 
 interface UserCreatedData {
   id: string;
+  first_name: string | null;
+  last_name: string | null;
   email_addresses: EmailAddress[];
   primary_email_address_id: string;
 }
@@ -49,6 +64,7 @@ interface ClerkWebhookEvent {
 // ---------------------------------------------------------------------------
 // POST /api/webhooks/clerk
 // Verifies Clerk webhook signature and handles user.created events.
+// Migrated from v2.1.0 `createUserProfile` Firebase Cloud Function.
 // ---------------------------------------------------------------------------
 webhooksRouter.post("/clerk", async (c) => {
   const webhookSecret = c.env.CLERK_WEBHOOK_SECRET;
@@ -83,8 +99,15 @@ webhooksRouter.post("/clerk", async (c) => {
   }
 
   // Handle the user.created event.
+  // Mirrors v2.1.0 createUserProfile: first registered user becomes admin.
   if (event.type === "user.created") {
-    const { id: userId, email_addresses, primary_email_address_id } = event.data;
+    const {
+      id: userId,
+      first_name,
+      last_name,
+      email_addresses,
+      primary_email_address_id,
+    } = event.data;
 
     // Find the primary email address from the list.
     const primaryEmail = email_addresses.find(
@@ -96,17 +119,46 @@ webhooksRouter.post("/clerk", async (c) => {
       return c.json({ error: "Primary email not found" }, 422);
     }
 
+    const email = primaryEmail.email_address;
+    const fullname =
+      [first_name, last_name].filter(Boolean).join(" ") ||
+      email.split("@")[0];
+
     try {
       const db = createDb(c.env);
-      // Insert with extended columns (role defaults to "pending", approved to false).
+
+      // Bootstrap-admin check: is this the very first profile?
+      // Mirrors v2.1.0 `profilesSnapshot.empty` logic.
+      const countResult = await db.execute(
+        sql`SELECT COUNT(*)::int AS count FROM profiles`
+      );
+      const isFirstUser = (countResult[0]?.count as number) === 0;
+
+      const role = isFirstUser ? "admin" : "pending";
+      const approved = isFirstUser;
+
       await db.execute(sql`
-        INSERT INTO profiles (user_id, email, role, approved)
-        VALUES (${userId}, ${primaryEmail.email_address}, 'pending', false)
+        INSERT INTO profiles (user_id, email, fullname, role, approved)
+        VALUES (${userId}, ${email}, ${fullname}, ${role}, ${approved})
         ON CONFLICT (user_id) DO NOTHING
       `);
-      console.log(`Profile created for user: ${userId}`);
+
+      console.log(
+        `[webhooks] Profile created for user: ${userId}`,
+        { role, approved, isFirstUser }
+      );
+
+      // Sync role/approved to Clerk public metadata so the JWT carries the
+      // current values — mirrors v2.1.0 setCustomUserClaims().
+      if (c.env.CLERK_SECRET_KEY) {
+        const clerk = createClerkClient({ secretKey: c.env.CLERK_SECRET_KEY });
+        await clerk.users.updateUserMetadata(userId, {
+          publicMetadata: { role, approved },
+        });
+        console.log(`[webhooks] Clerk metadata updated for user: ${userId}`);
+      }
     } catch (err) {
-      console.error("Database insert failed:", err);
+      console.error("Database insert or Clerk metadata update failed:", err);
       return c.json({ error: "Database error" }, 500);
     }
   }

@@ -6,9 +6,17 @@
  * │  Cloudflare Pages                                                    │
  * │  ┌──────────────┐    ┌─────────────────────────────────────────────┐ │
  * │  │  dist/       │    │  _worker.js  (this file, bundled by Wrangler)│ │
- * │  │  (Vite SPA)  │    │  ├─ GET /api/plots      → Drizzle + Hyperdrive│ │
- * │  │              │    │  ├─ GET /api/plots/:id   → single plot detail │ │
- * │  │              │    │  └─ *  (fallthrough)    → serve SPA           │ │
+ * │  │  (Vite SPA)  │    │  ├─ GET /api/plots          → Drizzle + Hyperdrive│ │
+ * │  │              │    │  ├─ GET /api/plots/:id      → single plot detail │ │
+ * │  │              │    │  ├─ GET/POST/DELETE /api/growth-logs          │ │
+ * │  │              │    │  ├─ GET/POST/DELETE /api/trees                │ │
+ * │  │              │    │  ├─ GET/POST/PUT/DELETE /api/images           │ │
+ * │  │              │    │  ├─ GET/POST/DELETE /api/spacing-logs         │ │
+ * │  │              │    │  ├─ GET/POST/DELETE /api/comments             │ │
+ * │  │              │    │  ├─ GET/PUT /api/notifications                │ │
+ * │  │              │    │  ├─ GET /api/users           → list profiles (admin)│ │
+ * │  │              │    │  ├─ PUT /api/users/:id/role  → sync role + claims  │ │
+ * │  │              │    │  └─ *  (fallthrough)         → serve SPA           │ │
  * │  └──────────────┘    └─────────────────────────────────────────────┘ │
  * └──────────────────────────────────────────────────────────────────────┘
  *
@@ -101,20 +109,21 @@ app.route("/api/comments", commentsRouter);
 // In-app notifications (notifications sheet)
 app.route("/api/notifications", notificationsRouter);
 
-// User profile management (users sheet — login/register handled by Clerk)
-app.route("/api/users", usersRouter);
-
 // ---------------------------------------------------------------------------
 // Protected routes (require valid Clerk session)
 // ---------------------------------------------------------------------------
 
-// Example of a protected route — extend as needed.
 app.use("/api/protected/*", clerkAuthMiddleware());
 
 app.get("/api/protected/me", (c) => {
   const userId = c.get("userId");
   return c.json({ ok: true, data: { userId } });
 });
+
+// User management — migrated from v2.1.0 syncUserClaims Cloud Function.
+// Requires a valid Clerk session; admin-only enforcement is done inside the router.
+app.use("/api/users/*", clerkAuthMiddleware());
+app.route("/api/users", usersRouter);
 
 // ---------------------------------------------------------------------------
 // SPA fallback — serve static assets for all non-API routes.
